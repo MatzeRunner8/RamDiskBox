@@ -448,12 +448,25 @@ int ParseCompress(const std::wstring& s, int def)
     return -1;
 }
 
+bool IsRememberedNetworkLetter(wchar_t letter)
+{
+    // Dauerhaft verbundene Netzlaufwerke stehen unter HKCU\Network\<Buchstabe>, auch wenn sie gerade
+    // getrennt sind; GetLogicalDrives meldet den Buchstaben dann als frei.
+    wchar_t key[] = L"Network\\X";
+    key[8] = (wchar_t)towupper(letter);
+    HKEY k;
+    if (RegOpenKeyExW(HKEY_CURRENT_USER, key, 0, KEY_READ, &k) != ERROR_SUCCESS) return false;
+    RegCloseKey(k);
+    return true;
+}
+
 bool IsDriveLetterUsed(wchar_t letter)
 {
     DWORD mask = GetLogicalDrives();
     int idx = towupper(letter) - L'A';
     if (idx < 0 || idx > 25) return true;
     if (mask & (1u << idx)) return true;
+    if (IsRememberedNetworkLetter(letter)) return true;
     wchar_t dev[3] = { (wchar_t)towupper(letter), L':', 0 };
     wchar_t target[512];
     return QueryDosDeviceW(dev, target, (DWORD)std::size(target)) != 0;

@@ -147,6 +147,8 @@ WinFsp und ist damit so schnell wie WinFsps eigenes Referenz-Dateisystem `memfs`
 - Der Inhalt liegt im Speicher des RamDiskBox-Prozesses. Bei akutem Speichermangel kann Windows Teile davon in die Auslagerungsdatei verschieben.
 - Mit Komprimierung liest das erste Öffnen einer komprimierten Datei mit etwa 1,4–1,5 GB/s (256 MB Text, alle Stufen). zstd komprimiert im Hintergrund rund 85 MB/s.
 - Keine festen Links (WinFsp unterstützt sie nicht).
+- Ohne Dienst (portabel bzw. „nur für mich“) gelten die Laufwerksbuchstaben nur für deine Anmeldung. Programme, die als Administrator laufen, sehen die Laufwerke dann nicht; Windows behandelt verbundene Netzlaufwerke genauso. Im Dienstmodus gelten sie für alle.
+- Lässt sich das Image beim Einhängen nicht lesen (gesperrt, keine Rechte, Speicherort nicht erreichbar), bleibt das Laufwerk ausgehängt, damit das Image nicht durch ein leeres Laufwerk ersetzt wird. Änderungen stehen in `CHANGELOG.md`.
 - Die Laufwerke erscheinen im Explorer, aber nicht in der Datenträgerverwaltung.
 
 ## Bauen

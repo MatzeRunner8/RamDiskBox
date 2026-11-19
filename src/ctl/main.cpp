@@ -266,6 +266,9 @@ int wmain(int argc, wchar_t** argv)
         std::wstring err;
         bool noMount = false;
         if (!ApplyOptions(c, argc, argv, 4, err, &noMount)) return Fail(err);
+        // Der Dienst (SYSTEM) sieht die Netzlaufwerke des Benutzers nicht: hier pruefen
+        if (IsRememberedNetworkLetter(L))
+            return Fail(TrF(L"Laufwerk %c: ist für ein (getrenntes) Netzlaufwerk reserviert.", L"Drive %c: is reserved for a (disconnected) network drive.", L));
         req.cmd = L"CREATE";
         req.args = c.ToKV();
         req.args[L"mount"] = noMount ? L"0" : L"1";

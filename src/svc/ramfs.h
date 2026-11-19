@@ -128,9 +128,11 @@ public:
     // Ordner anlegen (relativer Pfad, z. B. "Temp" oder "Temp\Sub"), vor oder nach dem Einhaengen.
     bool EnsureFolder(const std::wstring& relPath);
 
-    // Image (image.cpp)
+    // Image (image.cpp). LoadImage: *notOpened = true, wenn die Datei gar nicht geoeffnet werden konnte
+    // (gesperrt, keine Rechte) - dann ist sie nicht beschaedigt und darf weder beiseitegelegt noch
+    // spaeter ueberschrieben werden.
     bool SaveImage(const std::wstring& path, bool compress, std::wstring& err);
-    bool LoadImage(const std::wstring& path, std::wstring& err);
+    bool LoadImage(const std::wstring& path, std::wstring& err, bool* notOpened = nullptr);
 
     // Quellordner kopieren (import.cpp), vor dem Einhaengen. err enthaelt ggf. eine Warnung.
     struct ImportStats { unsigned long long files = 0, dirs = 0, bytes = 0, skipped = 0; };
@@ -170,6 +172,13 @@ private:
     std::vector<UINT8> InheritedFolderSd(Node* parent) { return InheritedSd(parent, true); }
     std::vector<UINT8> InheritedSd(Node* parent, bool isDir);
     void TouchDir(Node* dir);
+
+    // Der WinFsp-Treiber haelt Dateiinfos (bei Windows-Cache unbegrenzt) zwischen. Zeitstempel, die erst
+    // im Cleanup gesetzt werden, kaemen sonst nie bei Programmen an: nach dem Cleanup meldet ein eigener
+    // Thread die Datei als geaendert, das verwirft den Zwischenspeicher (FspFileSystemNotify).
+    void QueueNotify(Node* n);
+    void NotifierLoop();
+    std::wstring NotifyPath(Node* n);          // unter tree_; ohne Namensnormalisierung in Grossbuchstaben
 
     // Image-Hilfen (image.cpp)
     struct ImageWriter;
@@ -241,6 +250,13 @@ private:
     std::condition_variable qCv_;
     std::deque<std::pair<Node*, unsigned long long>> queue_;   // Knoten, faellig ab (Tick)
     std::atomic<bool> qStop_{ false };
+
+    // Aenderungsmeldungen an den Treiber (nur mit Windows-Cache, solange eingehaengt)
+    std::thread notifyThread_;
+    std::mutex nMu_;
+    std::condition_variable nCv_;
+    std::vector<std::wstring> nQ_;
+    bool nStop_ = false;
 };
 
 bool ParsePath(PCWSTR path, ParsedPath& out);

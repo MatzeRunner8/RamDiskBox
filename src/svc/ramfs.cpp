@@ -177,12 +177,24 @@ NTSTATUS RamFs::Mount()
         return st;
     }
     mounted_ = true;
+    if (opt_.useCache) {
+        nStop_ = false;
+        notifyThread_ = std::thread([this] { NotifierLoop(); });
+    }
     return STATUS_SUCCESS;
 }
 
 void RamFs::Unmount()
 {
     if (!mounted_) return;
+    if (notifyThread_.joinable()) {
+        {
+            std::lock_guard<std::mutex> g(nMu_);
+            nStop_ = true;
+        }
+        nCv_.notify_all();
+        notifyThread_.join();
+    }
     FspFileSystemStopDispatcher(fs_);
     FspFileSystemRemoveMountPoint(fs_);
     mounted_ = false;
@@ -1011,6 +1023,8 @@ VOID RamFs::Cleanup(FSP_FILE_SYSTEM* fs, PVOID ctx, PWSTR name, ULONG flags)
     Node* n = (Node*)ctx;
     Node* m = n->Main();
     if (s->userHandles_.load() > 0) s->userHandles_--;
+    // Aenderung (nicht nur Lesezugriff): danach den Zwischenspeicher des Treibers verwerfen lassen
+    const bool modified = (flags & (FspCleanupSetArchiveBit | FspCleanupSetLastWriteTime | FspCleanupSetChangeTime)) != 0;
     if (flags & (FspCleanupSetArchiveBit | FspCleanupSetLastAccessTime | FspCleanupSetLastWriteTime | FspCleanupSetChangeTime)) {
         Excl ml(&m->lock);
         if ((flags & FspCleanupSetArchiveBit) && !m->IsDir()) m->attributes |= FILE_ATTRIBUTE_ARCHIVE;
@@ -1033,10 +1047,83 @@ VOID RamFs::Cleanup(FSP_FILE_SYSTEM* fs, PVOID ctx, PWSTR name, ULONG flags)
             return;
         }
     }
+    if (modified && s->opt_.useCache) s->QueueNotify(n);
     // Geaenderte Datei nach kurzer Pause im Hintergrund komprimieren
     if (n->compDirty && s->compLevel_.load() > 0 && n->linked) {
         n->compDirty = false;
         s->EnqueueCompress(n, false);
+    }
+}
+
+std::wstring RamFs::NotifyPath(Node* n)
+{
+    std::vector<const std::wstring*> parts;
+    for (Node* p = n->Main(); p && p != root_; p = p->parent) parts.push_back(&p->name);
+    std::wstring path;
+    for (auto it = parts.rbegin(); it != parts.rend(); ++it) {
+        path += L'\\';
+        path += **it;
+    }
+    if (path.empty()) path = L"\\";
+    // Ohne Namensnormalisierung erwartet WinFsp die Grossschreibung des Namens
+    std::wstring up(path.size(), L'\0');
+    int len = LCMapStringEx(LOCALE_NAME_INVARIANT, LCMAP_UPPERCASE, path.data(), (int)path.size(), up.data(), (int)up.size(),
+        nullptr, nullptr, 0);
+    return len == (int)path.size() ? up : path;
+}
+
+void RamFs::QueueNotify(Node* n)
+{
+    std::wstring p;
+    {
+        Shared tl(&tree_);
+        if (!n->Main()->linked) return;
+        p = NotifyPath(n);
+    }
+    {
+        std::lock_guard<std::mutex> g(nMu_);
+        nQ_.push_back(std::move(p));
+    }
+    nCv_.notify_one();
+}
+
+void RamFs::NotifierLoop()
+{
+    std::vector<UINT8> buf(64 * 1024);
+    std::vector<UINT8> one(sizeof(FSP_FSCTL_NOTIFY_INFO) + 65536);
+    for (;;) {
+        std::vector<std::wstring> batch;
+        {
+            std::unique_lock<std::mutex> g(nMu_);
+            nCv_.wait(g, [&] { return nStop_ || !nQ_.empty(); });
+            if (nStop_) return;
+            batch.swap(nQ_);
+        }
+        std::sort(batch.begin(), batch.end());
+        batch.erase(std::unique(batch.begin(), batch.end()), batch.end());
+        for (int tries = 0; tries < 50; tries++) {
+            NTSTATUS st = FspFileSystemNotifyBegin(fs_, 500);
+            if (st == STATUS_CANT_WAIT) { Sleep(10); continue; }   // gerade laeuft eine Umbenennung
+            if (!NT_SUCCESS(st)) break;
+            ULONG used = 0;
+            for (auto& p : batch) {
+                size_t bytes = p.size() * sizeof(WCHAR);
+                if (bytes > 65000) continue;
+                auto* ni = (FSP_FSCTL_NOTIFY_INFO*)one.data();
+                ni->Size = (UINT16)(sizeof(FSP_FSCTL_NOTIFY_INFO) + bytes);
+                ni->Filter = FILE_NOTIFY_CHANGE_LAST_WRITE | FILE_NOTIFY_CHANGE_SIZE | FILE_NOTIFY_CHANGE_ATTRIBUTES;
+                ni->Action = FILE_ACTION_MODIFIED;
+                memcpy(ni->FileNameBuf, p.data(), bytes);
+                if (!FspFileSystemAddNotifyInfo(ni, buf.data(), (ULONG)buf.size(), &used)) {
+                    FspFileSystemNotify(fs_, (FSP_FSCTL_NOTIFY_INFO*)buf.data(), used);
+                    used = 0;
+                    FspFileSystemAddNotifyInfo(ni, buf.data(), (ULONG)buf.size(), &used);
+                }
+            }
+            if (used) FspFileSystemNotify(fs_, (FSP_FSCTL_NOTIFY_INFO*)buf.data(), used);
+            FspFileSystemNotifyEnd(fs_);
+            break;
+        }
     }
 }
 

@@ -12,6 +12,7 @@ foreach ($f in 'RamDiskBox.exe', 'RamDiskBoxSvc.exe', 'rdbctl.exe') {
 }
 Copy-Item (Join-Path $root 'README.de.md') (Join-Path $dir 'LIESMICH.md')
 Copy-Item (Join-Path $root 'README.md') $dir
+Copy-Item (Join-Path $root 'CHANGELOG.md') $dir
 Copy-Item (Join-Path $root 'LICENSE') $dir
 Copy-Item (Join-Path $root 'src\third_party\lz4\LICENSE') (Join-Path $dir 'LICENSE-lz4.txt')
 Copy-Item (Join-Path $root 'src\third_party\zstd\LICENSE') (Join-Path $dir 'LICENSE-zstd.txt')

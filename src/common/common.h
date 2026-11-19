@@ -122,7 +122,8 @@ bool ToBool(const std::wstring& s, bool def = false);
 std::wstring Win32Message(DWORD code);                       // Systemtext in der aktuellen Sprache, falls vorhanden
 const wchar_t* CompressName(int level);            // off, fast, normal, max
 int ParseCompress(const std::wstring& s, int def); // Name oder Ziffer, -1 = ungueltig
-bool IsDriveLetterUsed(wchar_t letter);
+bool IsDriveLetterUsed(wchar_t letter);           // belegt, verbunden oder fuer ein getrenntes Netzlaufwerk gemerkt
+bool IsRememberedNetworkLetter(wchar_t letter);   // HKCU\Network\<Buchstabe> (des aufrufenden Benutzers)
 
 // INI (UTF-16, liegt neben der EXE)
 struct Ini {

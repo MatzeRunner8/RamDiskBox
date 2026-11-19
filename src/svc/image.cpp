@@ -361,12 +361,15 @@ bool RamFs::SaveImage(const std::wstring& path, bool compress, std::wstring& err
 
 // ----------------------------------------------------------------------- Laden
 
-bool RamFs::LoadImage(const std::wstring& path, std::wstring& err)
+bool RamFs::LoadImage(const std::wstring& path, std::wstring& err, bool* notOpened)
 {
+    if (notOpened) *notOpened = false;
     HANDLE h = CreateFileW(path.c_str(), GENERIC_READ, FILE_SHARE_READ, nullptr, OPEN_EXISTING,
         FILE_FLAG_SEQUENTIAL_SCAN, nullptr);
     if (h == INVALID_HANDLE_VALUE) {
-        err = TrF(L"Image-Datei kann nicht geöffnet werden (Fehler %lu).", L"Cannot open the image file (error %lu).", GetLastError());
+        DWORD e = GetLastError();
+        err = TrF(L"Image-Datei kann nicht geöffnet werden: %s", L"Cannot open the image file: %s", Win32Message(e).c_str());
+        if (notOpened) *notOpened = true;
         return false;
     }
     struct Closer { HANDLE h; ~Closer() { CloseHandle(h); } } closer{ h };

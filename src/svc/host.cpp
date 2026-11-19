@@ -261,11 +261,29 @@ bool Host::ValidateConfig(const VolumeConfig& c, wchar_t ignoreLetter, std::wstr
 
 // ----------------------------------------------------------------------- Laufwerke
 
+// Fehlt eine Image-Datei, ist das nur dann "noch nicht angelegt", wenn ihr Laufwerk bzw. ihre
+// Freigabe erreichbar ist und Windows "nicht gefunden" meldet (nicht etwa "Zugriff verweigert").
+static bool ImageLocationReachable(const std::wstring& path, DWORD attrErr)
+{
+    if (attrErr != ERROR_FILE_NOT_FOUND && attrErr != ERROR_PATH_NOT_FOUND) return false;
+    std::wstring root;
+    if (path.size() >= 3 && path[1] == L':' && path[2] == L'\\') root = path.substr(0, 3);
+    else if (path.rfind(L"\\\\", 0) == 0) {   // \\server\share\ ...
+        size_t a = path.find(L'\\', 2), b = a == std::wstring::npos ? a : path.find(L'\\', a + 1);
+        root = b == std::wstring::npos ? path + L"\\" : path.substr(0, b + 1);
+    } else {
+        return false;
+    }
+    return GetFileAttributesW(root.c_str()) != INVALID_FILE_ATTRIBUTES;
+}
+
 bool Host::MountVolume(Volume& v, std::wstring& err)
 {
     if (v.fs) return true;
     if (IsDriveLetterUsed(v.cfg.letter)) {
-        err = TrF(L"Laufwerk %c: ist bereits belegt.", L"Drive %c: is already in use.", v.cfg.letter);
+        err = IsRememberedNetworkLetter(v.cfg.letter)
+            ? TrF(L"Laufwerk %c: ist für ein (getrenntes) Netzlaufwerk reserviert.", L"Drive %c: is reserved for a (disconnected) network drive.", v.cfg.letter)
+            : TrF(L"Laufwerk %c: ist bereits belegt.", L"Drive %c: is already in use.", v.cfg.letter);
         return false;
     }
     VolumeOptions o;
@@ -281,9 +299,32 @@ bool Host::MountVolume(Volume& v, std::wstring& err)
     if (!NT_SUCCESS(st)) { err = Tr(L"Dateisystem konnte nicht erzeugt werden: ", L"Could not create the file system: ") + NtMessage(st); return false; }
     v.SetError(L"");
     bool imageLoaded = false;
+    if (!v.cfg.image.empty() && v.cfg.loadImage) {
+        // Ein leer eingehaengtes Laufwerk ueberschreibt beim Aushaengen das Image. Leer starten darf es
+        // deshalb nur, wenn das Image wirklich noch nicht existiert (erste Benutzung) oder beschaedigt ist
+        // und beiseitegelegt wurde - nie, wenn es nur gerade nicht lesbar ist (gesperrt, keine Rechte,
+        // Netz- oder USB-Laufwerk nicht da).
+        DWORD attr = GetFileAttributesW(v.cfg.image.c_str());
+        DWORD ae = attr == INVALID_FILE_ATTRIBUTES ? GetLastError() : 0;
+        if (attr == INVALID_FILE_ATTRIBUTES && !ImageLocationReachable(v.cfg.image, ae)) {
+            err = TrF(L"Der Speicherort des Images ist nicht erreichbar (%s). Das Laufwerk wird nicht eingehängt, "
+                      L"damit das Image beim Aushängen nicht durch ein leeres Laufwerk ersetzt wird.",
+                      L"The image location is not reachable (%s). The drive is not mounted, "
+                      L"so that the image is not replaced by an empty drive when unmounting.", Win32Message(ae).c_str());
+            return false;
+        }
+    }
     if (!v.cfg.image.empty() && v.cfg.loadImage && GetFileAttributesW(v.cfg.image.c_str()) != INVALID_FILE_ATTRIBUTES) {
         std::wstring le;
-        if (!fs->LoadImage(v.cfg.image, le)) {
+        bool notOpened = false;
+        if (!fs->LoadImage(v.cfg.image, le, &notOpened)) {
+            if (notOpened) {
+                err = TrF(L"%s Das Laufwerk wird nicht eingehängt, damit das Image nicht überschrieben wird "
+                          L"(z. B. von einem Sicherungsprogramm gesperrt oder fehlende Rechte).",
+                          L"%s The drive is not mounted, so that the image is not overwritten "
+                          L"(e.g. locked by a backup program or missing permissions).", le.c_str());
+                return false;
+            }
             // Defektes Image nicht überschreiben: beiseitelegen und leer starten.
             // Der Zusatz im Dateinamen ist sprachneutral (keine Meldung).
             SYSTEMTIME t;
@@ -291,7 +332,12 @@ bool Host::MountVolume(Volume& v, std::wstring& err)
             wchar_t suf[64];
             swprintf_s(suf, L".damaged-%04u%02u%02u-%02u%02u%02u", t.wYear, t.wMonth, t.wDay, t.wHour, t.wMinute, t.wSecond);
             std::wstring bad = v.cfg.image + suf;
-            MoveFileExW(v.cfg.image.c_str(), bad.c_str(), MOVEFILE_REPLACE_EXISTING);
+            if (!MoveFileExW(v.cfg.image.c_str(), bad.c_str(), MOVEFILE_REPLACE_EXISTING)) {
+                err = TrF(L"Das Image ist beschädigt (%s) und konnte nicht beiseitegelegt werden: %s Das Laufwerk wird nicht eingehängt.",
+                          L"The image is damaged (%s) and could not be set aside: %s The drive is not mounted.",
+                          le.c_str(), Win32Message(GetLastError()).c_str());
+                return false;
+            }
             std::wstring msg = TrF(L"Image konnte nicht geladen werden (%s). Es wurde nach %s verschoben; das Laufwerk startet leer.",
                                    L"The image could not be loaded (%s). It was moved to %s; the drive starts empty.",
                                    le.c_str(), bad.c_str());
