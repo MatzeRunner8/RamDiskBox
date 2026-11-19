@@ -6,6 +6,10 @@ build output or scratch files. Optionally the contents are kept in an image file
 **Download:** setup and portable version under [Releases](https://github.com/MatzeRunner8/RamDiskBox/releases).
 Requires [WinFsp](https://winfsp.dev). Deutsch: [README.de.md](README.de.md)
 
+<p align="center">
+  <img src="docs/screenshots/main-dark-en.png" alt="RamDiskBox main window in dark mode: three RAM drives, two of them compressed with zstd and LZ4" width="880">
+</p>
+
 ## Features
 
 - Several RAM drives with free choice of letter, size and label
@@ -24,6 +28,17 @@ Requires [WinFsp](https://winfsp.dev). Deutsch: [README.de.md](README.de.md)
 - German and English, chosen automatically from the Windows display language and switchable in the settings; this also covers background-process messages and `rdbctl` (`RDB_LANG=de|en` forces a language)
 - Light and dark mode: follows the Windows setting (also when it changes while running) or fixed light/dark; high-contrast themes keep the system colors
 - No telemetry, no update checks, no network access
+
+## Screenshots
+
+<p align="center">
+  <img src="docs/screenshots/main-light-en.png" alt="Main window in light mode" width="880">
+</p>
+<p align="center">
+  <img src="docs/screenshots/drive-dark-en.png" alt="Drive settings: size, label, image backup, options and in-memory compression" height="480">
+  &nbsp;
+  <img src="docs/screenshots/setup-en.png" alt="Setup: install for all users with Windows service, or just for me" height="480">
+</p>
 
 ## Requirements
 

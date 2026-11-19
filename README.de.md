@@ -7,6 +7,10 @@ gesichert und beim nächsten Start wiederhergestellt werden.
 **Download:** Setup und portable Fassung unter [Releases](https://github.com/MatzeRunner8/RamDiskBox/releases).
 Voraussetzung ist [WinFsp](https://winfsp.dev). English: [README.md](README.md)
 
+<p align="center">
+  <img src="docs/screenshots/main-dark-de.png" alt="Hauptfenster von RamDiskBox im Dunkelmodus: drei RAM-Laufwerke, zwei davon mit zstd bzw. LZ4 komprimiert" width="880">
+</p>
+
 ## Funktionen
 
 - **Mehrere RAM-Laufwerke** mit frei wählbarem Buchstaben, Größe und Bezeichnung
@@ -37,6 +41,17 @@ Voraussetzung ist [WinFsp](https://winfsp.dev). English: [README.md](README.md)
 - **Deutsch und Englisch:** Sprache automatisch nach der Windows-Anzeigesprache, in den Einstellungen umstellbar. Das gilt auch für Meldungen des Hintergrundprozesses und für `rdbctl` (`RDB_LANG=de|en` erzwingt eine Sprache).
 - **Hell und Dunkel:** folgt der Windows-Einstellung (auch beim Umschalten im laufenden Betrieb) oder fest „Hell“/„Dunkel“; bei Kontrastdesigns bleiben die Systemfarben
 - **Datenschutz:** keine Telemetrie, keine Update-Prüfung, keine Netzwerkzugriffe
+
+## Bildschirmfotos
+
+<p align="center">
+  <img src="docs/screenshots/main-light-de.png" alt="Hauptfenster im Hellmodus" width="880">
+</p>
+<p align="center">
+  <img src="docs/screenshots/drive-dark-de.png" alt="Laufwerkseinstellungen: Größe, Bezeichnung, Image-Sicherung, Optionen und Komprimierung im Arbeitsspeicher" height="480">
+  &nbsp;
+  <img src="docs/screenshots/setup-de.png" alt="Setup: für alle Benutzer mit Windows-Dienst oder nur für mich" height="480">
+</p>
 
 ## Voraussetzung
 
