@@ -1,0 +1,18 @@
+#pragma once
+
+// Einzige Stelle fuer die Versionsnummer (wird auch von den .rc-Dateien gelesen).
+#define RDB_VER_MAJOR 1
+#define RDB_VER_MINOR 4
+#define RDB_VER_PATCH 0
+#define RDB_BUILD     6
+
+#define RDB_STR2(x) #x
+#define RDB_STR(x) RDB_STR2(x)
+#define RDB_WSTR2(x) L## #x
+#define RDB_WSTR(x) RDB_WSTR2(x)
+
+#define RDB_VERSION_A RDB_STR(RDB_VER_MAJOR) "." RDB_STR(RDB_VER_MINOR) "." RDB_STR(RDB_VER_PATCH)
+#define RDB_VERSION_W RDB_WSTR(RDB_VER_MAJOR) L"." RDB_WSTR(RDB_VER_MINOR) L"." RDB_WSTR(RDB_VER_PATCH)
+#define RDB_BUILD_W   RDB_WSTR(RDB_BUILD)
+#define RDB_VERSION_RC RDB_VER_MAJOR,RDB_VER_MINOR,RDB_VER_PATCH,RDB_BUILD
+#define RDB_VERSION_RCSTR RDB_STR(RDB_VER_MAJOR) "." RDB_STR(RDB_VER_MINOR) "." RDB_STR(RDB_VER_PATCH) "." RDB_STR(RDB_BUILD)

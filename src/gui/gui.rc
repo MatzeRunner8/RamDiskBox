@@ -1,0 +1,143 @@
+#pragma code_page(65001)
+#include <windows.h>
+#include <commctrl.h>
+#include "resource.h"
+#include "../common/version.h"
+
+IDI_APP ICON "app.ico"
+
+CREATEPROCESS_MANIFEST_RESOURCE_ID RT_MANIFEST "gui.manifest"
+
+// Texte werden zur Laufzeit in der eingestellten Sprache gesetzt.
+
+IDD_VOLUME DIALOGEX 0, 0, 300, 340
+STYLE DS_SETFONT | DS_MODALFRAME | DS_FIXEDSYS | DS_CENTER | WS_POPUP | WS_CAPTION | WS_SYSMENU
+CAPTION "RAM-Laufwerk"
+FONT 9, "Segoe UI", 400, 0, 0x1
+BEGIN
+    GROUPBOX        "Laufwerk", IDC_G_DRIVE, 7, 5, 286, 106
+    LTEXT           "Buchstabe:", IDC_L_LETTER, 15, 20, 62, 8
+    COMBOBOX        IDC_LETTER, 80, 18, 46, 200, CBS_DROPDOWNLIST | WS_VSCROLL | WS_TABSTOP
+    LTEXT           "Größe:", IDC_L_SIZE, 140, 20, 44, 8
+    EDITTEXT        IDC_VSIZE, 186, 18, 52, 12, ES_AUTOHSCROLL
+    COMBOBOX        IDC_UNIT, 242, 18, 42, 100, CBS_DROPDOWNLIST | WS_TABSTOP
+    LTEXT           "Bezeichnung:", IDC_L_LABEL, 15, 38, 62, 8
+    EDITTEXT        IDC_LABEL, 80, 36, 204, 12, ES_AUTOHSCROLL
+    LTEXT           "Ordner anlegen:", IDC_L_FOLDERS, 15, 56, 62, 8
+    EDITTEXT        IDC_FOLDERS, 80, 54, 204, 12, ES_AUTOHSCROLL
+    LTEXT           "Quellordner:", IDC_L_SOURCE, 15, 74, 62, 8
+    EDITTEXT        IDC_SOURCE, 80, 72, 182, 12, ES_AUTOHSCROLL
+    PUSHBUTTON      "…", IDC_BROWSE_SRC, 266, 71, 18, 14
+    LTEXT           "", IDC_HINT, 15, 89, 270, 18
+    GROUPBOX        "Inhalt sichern", IDC_G_IMAGE, 7, 115, 286, 96
+    AUTOCHECKBOX    "Image", IDC_USEIMAGE, 15, 128, 270, 10
+    LTEXT           "Datei:", IDC_L_IMAGE, 15, 144, 62, 8
+    EDITTEXT        IDC_IMAGE, 80, 142, 182, 12, ES_AUTOHSCROLL
+    PUSHBUTTON      "…", IDC_BROWSE, 266, 141, 18, 14
+    AUTOCHECKBOX    "Laden", IDC_LOADIMG, 15, 160, 130, 10
+    AUTOCHECKBOX    "Komprimieren", IDC_COMPRESS, 150, 160, 134, 10
+    AUTOCHECKBOX    "Speichern", IDC_SAVEIMG, 15, 174, 270, 10
+    LTEXT           "Automatisch", IDC_L_AUTOSAVE, 15, 192, 100, 8
+    EDITTEXT        IDC_AUTOSAVE, 118, 190, 28, 12, ES_NUMBER
+    LTEXT           "Minuten", IDC_L_MINUTES, 152, 192, 132, 8
+    GROUPBOX        "Optionen", IDC_G_OPTIONS, 7, 215, 286, 99
+    AUTOCHECKBOX    "Automount", IDC_AUTOMOUNT, 15, 228, 270, 10
+    AUTOCHECKBOX    "NTFS", IDC_NTFS, 15, 241, 270, 10
+    AUTOCHECKBOX    "Cache", IDC_CACHE, 15, 254, 270, 10
+    AUTOCHECKBOX    "Wipe", IDC_WIPE, 15, 267, 270, 10
+    AUTOCHECKBOX    "Defender", IDC_AVEXCLUDE, 15, 280, 270, 10
+    LTEXT           "Komprimierung:", IDC_L_RAMCOMP, 15, 297, 132, 8
+    COMBOBOX        IDC_RAMCOMP, 150, 295, 134, 100, CBS_DROPDOWNLIST | WS_TABSTOP
+    DEFPUSHBUTTON   "OK", IDOK, 186, 320, 50, 14
+    PUSHBUTTON      "Abbrechen", IDCANCEL, 243, 320, 50, 14
+END
+
+IDD_SETTINGS DIALOGEX 0, 0, 300, 224
+STYLE DS_SETFONT | DS_MODALFRAME | DS_FIXEDSYS | DS_CENTER | WS_POPUP | WS_CAPTION | WS_SYSMENU
+CAPTION "Einstellungen"
+FONT 9, "Segoe UI", 400, 0, 0x1
+BEGIN
+    GROUPBOX        "Betriebsart", IDC_G_MODE, 7, 5, 286, 96
+    LTEXT           "", IDC_MODE_TEXT, 15, 18, 270, 34
+    AUTOCHECKBOX    "Benutzer", IDC_ALLOWUSER, 15, 58, 270, 10
+    PUSHBUTTON      "Als Dienst einrichten", IDC_INSTALL, 15, 78, 128, 15
+    PUSHBUTTON      "Dienst entfernen", IDC_UNINSTALL, 150, 78, 128, 15
+    GROUPBOX        "Oberfläche", IDC_G_GUI, 7, 105, 286, 94
+    AUTOCHECKBOX    "Autostart", IDC_AUTOSTART, 15, 118, 270, 10
+    AUTOCHECKBOX    "Startmin", IDC_STARTMIN, 15, 131, 270, 10
+    AUTOCHECKBOX    "Tray", IDC_TRAYCLOSE, 15, 144, 270, 10
+    LTEXT           "Sprache:", IDC_L_LANG, 15, 162, 62, 8
+    COMBOBOX        IDC_LANG, 80, 160, 150, 60, CBS_DROPDOWNLIST | WS_TABSTOP
+    LTEXT           "Darstellung:", IDC_L_THEME, 15, 180, 62, 8
+    COMBOBOX        IDC_THEME, 80, 178, 150, 60, CBS_DROPDOWNLIST | WS_TABSTOP
+    DEFPUSHBUTTON   "OK", IDOK, 186, 205, 50, 14
+    PUSHBUTTON      "Abbrechen", IDCANCEL, 243, 205, 50, 14
+END
+
+IDD_TEMP DIALOGEX 0, 0, 280, 136
+STYLE DS_SETFONT | DS_MODALFRAME | DS_FIXEDSYS | DS_CENTER | WS_POPUP | WS_CAPTION | WS_SYSMENU
+CAPTION "TEMP"
+FONT 9, "Segoe UI", 400, 0, 0x1
+BEGIN
+    LTEXT           "", IDC_L_TEMP_INFO, 7, 7, 266, 34
+    LTEXT           "", IDC_TEMP_CURRENT, 7, 45, 266, 18
+    LTEXT           "Laufwerk:", IDC_L_TEMP_DRIVE, 7, 70, 60, 8
+    COMBOBOX        IDC_TEMP_DRIVE, 70, 68, 60, 200, CBS_DROPDOWNLIST | WS_VSCROLL | WS_TABSTOP
+    LTEXT           "Ordner:", IDC_L_TEMP_FOLDER, 7, 88, 60, 8
+    EDITTEXT        IDC_TEMP_FOLDER, 70, 86, 120, 12, ES_AUTOHSCROLL
+    PUSHBUTTON      "Zurücksetzen", IDC_TEMP_RESET, 7, 115, 90, 14
+    DEFPUSHBUTTON   "Umleiten", IDOK, 166, 115, 52, 14
+    PUSHBUTTON      "Abbrechen", IDCANCEL, 221, 115, 52, 14
+END
+
+IDD_ABOUT DIALOGEX 0, 0, 250, 132
+STYLE DS_SETFONT | DS_MODALFRAME | DS_FIXEDSYS | DS_CENTER | WS_POPUP | WS_CAPTION | WS_SYSMENU
+CAPTION "RamDiskBox"
+FONT 9, "Segoe UI", 400, 0, 0x1
+BEGIN
+    ICON            IDI_APP, -1, 10, 10, 21, 20
+    LTEXT           "", IDC_ABOUT_TITLE, 42, 10, 200, 12
+    LTEXT           "", IDC_ABOUT_TEXT, 42, 26, 200, 74
+    PUSHBUTTON      "Buy me a coffee (Ko-fi)", IDC_KOFI, 42, 110, 110, 15
+    DEFPUSHBUTTON   "OK", IDOK, 192, 110, 50, 15
+END
+
+VS_VERSION_INFO VERSIONINFO
+ FILEVERSION RDB_VERSION_RC
+ PRODUCTVERSION RDB_VERSION_RC
+ FILEFLAGSMASK 0x3fL
+ FILEFLAGS 0x0L
+ FILEOS VOS_NT_WINDOWS32
+ FILETYPE VFT_APP
+ FILESUBTYPE 0x0L
+BEGIN
+    BLOCK "StringFileInfo"
+    BEGIN
+        BLOCK "040704b0"
+        BEGIN
+            VALUE "CompanyName", "justbox"
+            VALUE "FileDescription", "RamDiskBox"
+            VALUE "FileVersion", RDB_VERSION_RCSTR
+            VALUE "InternalName", "RamDiskBox"
+            VALUE "LegalCopyright", "justbox"
+            VALUE "OriginalFilename", "RamDiskBox.exe"
+            VALUE "ProductName", "RamDiskBox"
+            VALUE "ProductVersion", RDB_VERSION_RCSTR
+        END
+        BLOCK "040904b0"
+        BEGIN
+            VALUE "CompanyName", "justbox"
+            VALUE "FileDescription", "RamDiskBox"
+            VALUE "FileVersion", RDB_VERSION_RCSTR
+            VALUE "InternalName", "RamDiskBox"
+            VALUE "LegalCopyright", "justbox"
+            VALUE "OriginalFilename", "RamDiskBox.exe"
+            VALUE "ProductName", "RamDiskBox"
+            VALUE "ProductVersion", RDB_VERSION_RCSTR
+        END
+    END
+    BLOCK "VarFileInfo"
+    BEGIN
+        VALUE "Translation", 0x407, 1200, 0x409, 1200
+    END
+END
