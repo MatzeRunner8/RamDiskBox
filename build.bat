@@ -36,7 +36,7 @@ cl %CFLAGS% /Fobuild\obj\ctl\ /Fdbuild\obj\ctl\ /Fe"build\bin\rdbctl.exe" src\ct
 rem ---- Oberflaeche ----
 if exist src\gui\gui.cpp (
    rc /nologo /fo build\obj\gui\gui.res src\gui\gui.rc || exit /b 1
-   cl %CFLAGS% /Fobuild\obj\gui\ /Fdbuild\obj\gui\ /Fe"build\bin\RamDiskBox.exe" src\gui\gui.cpp src\gui\dialogs.cpp src\gui\lang.cpp src\gui\theme.cpp src\common\common.cpp build\obj\gui\gui.res ^
+   cl %CFLAGS% /Fobuild\obj\gui\ /Fdbuild\obj\gui\ /Fe"build\bin\RamDiskBox.exe" src\gui\gui.cpp src\gui\dialogs.cpp src\gui\lang.cpp src\gui\theme.cpp src\gui\widgets.cpp src\common\common.cpp build\obj\gui\gui.res ^
       /link /SUBSYSTEM:WINDOWS /MACHINE:X64 /MANIFEST:NO /DEBUG /OPT:REF /OPT:ICF /PDB:build\obj\gui\RamDiskBox.pdb user32.lib gdi32.lib comctl32.lib shell32.lib comdlg32.lib ^
       advapi32.lib ole32.lib uxtheme.lib dwmapi.lib shlwapi.lib uuid.lib || exit /b 1
 )

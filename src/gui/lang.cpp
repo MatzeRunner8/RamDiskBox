@@ -176,6 +176,16 @@ const Entry kText[S_COUNT] = {
     /* S_HOST_EXITED */ { L"Der Hintergrundprozess wurde beendet (Code %lu). Details stehen im Protokoll RamDiskBox.log.", L"The background process exited (code %lu). See the log RamDiskBox.log for details." },
     /* S_NEED_ADMIN_Q */ { L"%s\n\nMit Administratorrechten übernehmen? Windows fragt dann nach der Berechtigung.", L"%s\n\nApply with administrator rights? Windows will then ask for permission." },
     /* S_ELEVATED_FAIL */ { L"Das Übernehmen mit Administratorrechten ist fehlgeschlagen (Code %d).", L"Applying with administrator rights failed (code %d)." },
+    /* S_COL_USAGE */ { L"Belegung", L"Usage" },
+    /* S_MEM_DISKS */ { L"RAM-Laufwerke: %s", L"RAM drives: %s" },
+    /* S_MEM_FREE */ { L"Frei: %s", L"Free: %s" },
+    /* S_MEM_OTHER */ { L"Programme: %s", L"Programs: %s" },
+    /* S_SEL_INFO */ { L"%c:  %s belegt · %s im Arbeitsspeicher · %s Datei(en)", L"%c:  %s used · %s in memory · %s file(s)" },
+    /* S_SEL_SAVED */ { L" · gesichert %s", L" · saved %s" },
+    /* S_SEL_DISMOUNTED */ { L"%c:  ausgehängt", L"%c:  unmounted" },
+    /* S_M_STATS */ { L"&Statistik …", L"S&tatistics …" },
+    /* S_STATS_TEXT */ { L"Seit %s\n\nGelesen: %s\nGeschrieben: %s\n\nHöchstwerte: Lesen %s/s, Schreiben %s/s\nLaufzeit des Hintergrundprozesses: %s",
+                         L"Since %s\n\nRead: %s\nWritten: %s\n\nPeaks: read %s/s, write %s/s\nBackground process uptime: %s" },
 };
 
 static_assert(sizeof(kText) / sizeof(kText[0]) == S_COUNT, "Texttabelle passt nicht zu enum Str");

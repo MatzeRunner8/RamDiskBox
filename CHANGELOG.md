@@ -1,5 +1,25 @@
 # Änderungen / Changelog
 
+## 1.6.0 (Build 9)
+
+- **Aufgeräumte Oberfläche:**
+  - Symbolleiste mit großen, farbigen Symbolen statt Textknöpfen, mit Kurzhilfe beim Überfahren.
+  - Weniger Spalten: Status als Symbol vor dem Buchstaben, Belegung als Balken mit Prozent.
+  - Speicherleiste unten: RAM-Laufwerke, frei und andere Programme.
+  - Die Statuszeile zeigt die Angaben zum ausgewählten Laufwerk.
+  - Gesamtzähler und Höchstwerte stehen jetzt unter **Extras → Statistik**.
+- Die Symbole kommen aus der Windows-Symbolschrift, sind bei jeder Skalierung scharf und passen sich Hell/Dunkel an.
+
+**English**
+
+- **Tidier user interface:**
+  - Toolbar with large colored icons instead of text buttons, with tooltips.
+  - Fewer columns: status as an icon before the letter, usage as a bar with percent.
+  - Memory bar at the bottom: RAM drives, free and other programs.
+  - The status line shows details of the selected drive.
+  - Lifetime counters and peaks moved to **Tools → Statistics**.
+- Icons come from the Windows icon font, are sharp at any scaling and follow light/dark mode.
+
 ## 1.5.0 (Build 8)
 
 - **Schneller im Dienstmodus:** Der Windows-Cache bleibt beim Schließen einer Datei erhalten. Erneutes Öffnen und Lesen ist damit bei aktivem Defender rund 30-mal so schnell (gemessen: 7.200 statt 260 kleine Dateien pro Sekunde). Vor jeder Image-Sicherung wird das Laufwerk zurückgeschrieben; klappt das nicht, wird das Image nicht gespeichert und eine Meldung erscheint. Ohne Dienst bleibt es beim bisherigen, sicheren Verhalten.

@@ -41,6 +41,8 @@ enum Str {
     S_HOST_START_FAILED, S_HOST_NO_RIGHTS, S_HOST_MISSING, S_HOST_EXITED,
     // 1.5: Aenderung mit Administratorrechten uebernehmen
     S_NEED_ADMIN_Q, S_ELEVATED_FAIL,
+    // 1.6: aufgeraeumte Oberflaeche
+    S_COL_USAGE, S_MEM_DISKS, S_MEM_FREE, S_MEM_OTHER, S_SEL_INFO, S_SEL_SAVED, S_SEL_DISMOUNTED, S_M_STATS, S_STATS_TEXT,
     S_COUNT
 };
 

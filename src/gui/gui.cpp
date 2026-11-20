@@ -1,5 +1,6 @@
 // RamDiskBox.exe - Oberflaeche
 #include "gui.h"
+#include "widgets.h"
 #include "../common/version.h"
 #include <shellapi.h>
 #include <commdlg.h>
@@ -36,21 +37,38 @@ enum : UINT {
 enum : int {
     CMD_NEW = 40001, CMD_EDIT, CMD_REMOVE, CMD_MOUNT, CMD_DISMOUNT, CMD_SAVE, CMD_SAVEAS, CMD_EXPLORE,
     CMD_TEMP, CMD_SETTINGS, CMD_LOG, CMD_RECONNECT, CMD_QUITPORTABLE, CMD_RESETSTATS,
-    CMD_ABOUT, CMD_KOFI, CMD_EXIT, CMD_SHOW, CMD_REFRESH,
+    CMD_ABOUT, CMD_KOFI, CMD_EXIT, CMD_SHOW, CMD_REFRESH, CMD_STATS,
     CMD_TRAY_TOGGLE = 41000,   // + Buchstabe
 };
 
 constexpr int ID_LIST = 5100;
 constexpr int ID_STATUS = 5200;
+constexpr int ID_MEMBAR = 5300;
 constexpr int ID_BTN_FIRST = 5001;
 constexpr UINT TIMER_REFRESH = 1;
 
-const int kBtnCmd[] = { CMD_NEW, CMD_EDIT, CMD_REMOVE, CMD_MOUNT, CMD_DISMOUNT, CMD_SAVE, CMD_EXPLORE };
-const Str kBtnText[] = { S_NEW, S_EDIT, S_REMOVE, S_MOUNT, S_DISMOUNT, S_SAVE, S_OPEN };
-constexpr int kBtnCount = 7;
+// Symbolleiste: Befehl, Kurzhilfe, Symbol, Farbe; Trennstriche nach den Gruppen
+const int kBtnCmd[] = { CMD_NEW, CMD_EDIT, CMD_REMOVE, CMD_MOUNT, CMD_DISMOUNT, CMD_SAVE, CMD_EXPLORE, CMD_SETTINGS };
+const Str kBtnText[] = { S_NEW, S_EDIT, S_REMOVE, S_MOUNT, S_DISMOUNT, S_SAVE, S_OPEN, S_SD_TITLE };
+const wchar_t kBtnGlyph[] = { Glyph::Add, Glyph::Edit, Glyph::Cancel, Glyph::CheckMark, Glyph::Stop, Glyph::Save,
+                              Glyph::FolderOpen, Glyph::Settings };
+const Tint kBtnTint[] = { Tint::Green, Tint::Blue, Tint::Red, Tint::Green, Tint::Gray, Tint::Blue, Tint::Amber, Tint::Gray };
+constexpr int kBtnCount = 8;
+constexpr bool kSepAfter[] = { false, false, true, false, true, false, true, false };
 
-HWND g_list = nullptr, g_status = nullptr;
+// Spalten der Liste
+enum Col { COL_DRIVE, COL_LABEL, COL_SIZE, COL_USAGE, COL_COMP, COL_IMAGE, COL_COUNT };
+// Status-Symbole (Reihenfolge im Bildersatz)
+enum Img { IMG_MOUNTED, IMG_DISMOUNTED, IMG_WARNING, IMG_SAVING };
+
+struct RowInfo { bool mounted = false; unsigned long long used = 0, size = 0; };
+
+HWND g_list = nullptr, g_status = nullptr, g_membar = nullptr, g_tip = nullptr;
 HWND g_btn[kBtnCount] = {};
+HIMAGELIST g_icons = nullptr;
+std::vector<int> g_sepX;          // x-Positionen der Trennstriche in der Symbolleiste
+std::vector<RowInfo> g_rows;      // Belegung je Zeile (fuer den gezeichneten Balken)
+int g_toolTop = 0, g_toolBottom = 0;
 HFONT g_font = nullptr;
 UINT g_dpi = 96;
 HACCEL g_accel = nullptr;
@@ -131,14 +149,27 @@ bool TempOnDrive(wchar_t letter)
 
 // ----------------------------------------------------------------------- Liste
 
+// Status-Symbole der Liste (Farben je Hell/Dunkel, Groesse je DPI)
+void BuildIcons()
+{
+    int px = S(16);
+    HIMAGELIST il = ImageList_Create(px, px, ILC_COLOR32, 4, 0);
+    const wchar_t glyphs[] = { Glyph::CompletedSolid, Glyph::RadioOff, Glyph::Warning, Glyph::Save };
+    const Tint tints[] = { Tint::Green, Tint::Gray, Tint::Amber, Tint::Blue };
+    for (int i = 0; i < 4; i++) ImageList_Add(il, GlyphBitmap(glyphs[i], px, TintColor(tints[i])), nullptr);
+    ListView_SetImageList(g_list, il, LVSIL_SMALL);
+    if (g_icons) ImageList_Destroy(g_icons);
+    g_icons = il;
+}
+
 void SetColumns()
 {
-    const Str cols[] = { S_COL_DRIVE, S_COL_LABEL, S_COL_STATE, S_COL_SIZE, S_COL_USED, S_COL_RAM, S_COL_COMP, S_COL_FILES, S_COL_IMAGE, S_COL_LASTSAVE };
-    const int widths[] = { 64, 100, 85, 70, 70, 70, 145, 55, 150, 120 };
-    const int fmt[] = { LVCFMT_LEFT, LVCFMT_LEFT, LVCFMT_LEFT, LVCFMT_RIGHT, LVCFMT_RIGHT, LVCFMT_RIGHT, LVCFMT_LEFT, LVCFMT_RIGHT, LVCFMT_LEFT, LVCFMT_LEFT };
+    const Str cols[] = { S_COL_DRIVE, S_COL_LABEL, S_COL_SIZE, S_COL_USAGE, S_COL_COMP, S_COL_IMAGE };
+    const int widths[] = { 96, 130, 80, 190, 170, 240 };
+    const int fmt[] = { LVCFMT_LEFT, LVCFMT_LEFT, LVCFMT_RIGHT, LVCFMT_LEFT, LVCFMT_LEFT, LVCFMT_LEFT };
     HWND hdr = ListView_GetHeader(g_list);
     int have = hdr ? Header_GetItemCount(hdr) : 0;
-    for (int i = 0; i < 10; i++) {
+    for (int i = 0; i < COL_COUNT; i++) {
         LVCOLUMNW c{};
         c.mask = LVCF_TEXT | LVCF_FMT | LVCF_WIDTH;
         c.pszText = (LPWSTR)T(cols[i]);
@@ -177,7 +208,7 @@ void UpdateList()
         wchar_t sel = SelectedLetter();
         ListView_DeleteAllItems(g_list);
         for (size_t i = 0; i < letters.size(); i++) {
-            std::wstring t = std::wstring(1, letters[i]) + L":";
+            std::wstring t = L" " + std::wstring(1, letters[i]) + L":";   // Abstand zum Status-Symbol
             LVITEMW it{};
             it.mask = LVIF_TEXT | LVIF_PARAM;
             it.iItem = (int)i;
@@ -190,31 +221,75 @@ void UpdateList()
         if (pick < 0 && !letters.empty()) pick = 0;
         if (pick >= 0) ListView_SetItemState(g_list, pick, LVIS_SELECTED | LVIS_FOCUSED, LVIS_SELECTED | LVIS_FOCUSED);
     }
+    g_rows.assign(g_last.sections.size(), RowInfo{});
     for (size_t i = 0; i < g_last.sections.size(); i++) {
         const KV& kv = g_last.sections[i].second;
         int row = (int)i;
         std::wstring st = Get(kv, L"state");
         bool mounted = st == L"mounted" || st == L"saving";
+        // Status als Symbol vor dem Buchstaben
+        int img = st == L"saving" ? IMG_SAVING : !Get(kv, L"lasterror").empty() ? IMG_WARNING : mounted ? IMG_MOUNTED : IMG_DISMOUNTED;
+        LVITEMW it{};
+        it.mask = LVIF_IMAGE;
+        it.iItem = row;
+        ListView_GetItem(g_list, &it);
+        if (it.iImage != img) {
+            it.iImage = img;
+            ListView_SetItem(g_list, &it);
+        }
         std::wstring label = mounted && !Get(kv, L"livelabel").empty() ? Get(kv, L"livelabel") : Get(kv, L"label");
-        SetCell(row, 1, label);
-        std::wstring stText = st == L"mounted" ? T(S_ST_MOUNTED) : st == L"saving" ? T(S_ST_SAVING) : T(S_ST_DISMOUNTED);
-        if (!Get(kv, L"lasterror").empty()) stText += L" ⚠";
-        SetCell(row, 2, stText);
-        SetCell(row, 3, FormatSize(ToU64(Get(kv, L"size"))));
-        SetCell(row, 4, mounted ? FormatSize(ToU64(Get(kv, L"used"))) : L"");
-        SetCell(row, 5, mounted ? FormatSize(ToU64(Get(kv, L"memory"))) : L"");
+        SetCell(row, COL_LABEL, label);
+        SetCell(row, COL_SIZE, FormatSize(ToU64(Get(kv, L"size"))));
+        g_rows[i] = { mounted, ToU64(Get(kv, L"used")), ToU64(Get(kv, L"size")) };
+        SetCell(row, COL_USAGE, L"");   // Balken und Text zeichnet ListCustomDraw
         {
             int lvl = ParseCompress(Get(kv, L"compress"), 0);
             const Str names[] = { S_COMP_OFF, S_COMP_FAST, S_COMP_NORMAL, S_COMP_MAX };
             std::wstring ct = T(names[lvl < 0 || lvl > 3 ? 0 : lvl]);
             unsigned long long raw = ToU64(Get(kv, L"compraw")), stored = ToU64(Get(kv, L"compstored"));
             if (mounted && raw > 0) ct = Fmt(T(S_COMP_SAVED), ct.c_str(), (int)((raw > stored ? raw - stored : 0) * 100 / raw));
-            SetCell(row, 6, ct);
+            SetCell(row, COL_COMP, ct);
         }
-        SetCell(row, 7, mounted ? Get(kv, L"files") : L"");
-        SetCell(row, 8, Get(kv, L"image").empty() ? T(S_NO_IMAGE) : Get(kv, L"image"));
-        SetCell(row, 9, DisplayTime(Get(kv, L"lastsave")));
+        SetCell(row, COL_IMAGE, Get(kv, L"image").empty() ? T(S_NO_IMAGE) : Get(kv, L"image"));
     }
+    ListView_RedrawItems(g_list, 0, (int)g_rows.size());
+}
+
+// Belegungsbalken in der Spalte "Belegung" (nach dem normalen Zeichnen, damit Auswahl und Hover bleiben)
+LRESULT ListCustomDraw(NMLVCUSTOMDRAW* cd)
+{
+    switch (cd->nmcd.dwDrawStage) {
+    case CDDS_PREPAINT: return CDRF_NOTIFYITEMDRAW;
+    case CDDS_ITEMPREPAINT: return CDRF_NOTIFYPOSTPAINT;
+    case CDDS_ITEMPOSTPAINT: {
+        size_t row = cd->nmcd.dwItemSpec;
+        if (row >= g_rows.size() || !g_rows[row].mounted || !g_rows[row].size) return CDRF_DODEFAULT;
+        RECT cell{};
+        ListView_GetSubItemRect(g_list, (int)row, COL_USAGE, LVIR_BOUNDS, &cell);
+        HDC dc = cd->nmcd.hdc;
+        int pct = (int)std::min<unsigned long long>(100, g_rows[row].used * 100 / g_rows[row].size);
+        int barW = std::min(S(70), (int)(cell.right - cell.left) / 2), barH = S(8);
+        RECT bar{ cell.left + S(6), (cell.top + cell.bottom - barH) / 2, 0, 0 };
+        bar.right = bar.left + barW;
+        bar.bottom = bar.top + barH;
+        bool dark = IsDark();
+        HBRUSH track = CreateSolidBrush(dark ? RGB(62, 62, 62) : RGB(222, 222, 222));
+        FillRect(dc, &bar, track);
+        DeleteObject(track);
+        RECT fill = bar;
+        fill.right = bar.left + std::max(pct > 0 ? 2 : 0, barW * pct / 100);
+        HBRUSH fb = CreateSolidBrush(pct >= 95 ? TintColor(Tint::Red) : pct >= 80 ? TintColor(Tint::Amber) : TintColor(Tint::Green));
+        FillRect(dc, &fill, fb);
+        DeleteObject(fb);
+        std::wstring t = FormatSize(g_rows[row].used) + L" · " + std::to_wstring(pct) + L" %";
+        RECT tr{ bar.right + S(8), cell.top, cell.right - S(4), cell.bottom };
+        SetBkMode(dc, TRANSPARENT);
+        SetTextColor(dc, dark ? Colors().text : GetSysColor(COLOR_WINDOWTEXT));
+        DrawTextW(dc, t.c_str(), -1, &tr, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS | DT_NOPREFIX);
+        return CDRF_DODEFAULT;
+    }
+    }
+    return CDRF_DODEFAULT;
 }
 
 // ----------------------------------------------------------------------- Status/Knoepfe/Infobereich
@@ -222,44 +297,64 @@ void UpdateList()
 void UpdateStatus()
 {
     if (!g_status) return;
-    std::wstring p0, p1, p2, p3;
+    // Teil 0: Angaben zum ausgewaehlten Laufwerk (bzw. Warnung, Fortschritt, kurze Meldung)
+    // Teil 1: Betriebsart, Teil 2: aktuelle Lese-/Schreibrate
+    std::wstring p0, p1, p2;
     if (g_online) {
-        p0 = Fmt(g_last.Get(L"mode") == L"service" ? T(S_SVC_SERVICE) : T(S_SVC_PORTABLE), g_last.Get(L"version").c_str());
-        p1 = Fmt(T(S_RAM), FormatSize(ToU64(g_last.Get(L"ramfree"))).c_str(), FormatSize(ToU64(g_last.Get(L"ramtotal"))).c_str());
+        p1 = Fmt(g_last.Get(L"mode") == L"service" ? T(S_SVC_SERVICE) : T(S_SVC_PORTABLE), g_last.Get(L"version").c_str());
         p2 = Fmt(T(S_IO), FormatSize(ToU64(g_last.Get(L"speedread"))).c_str(), FormatSize(ToU64(g_last.Get(L"speedwrite"))).c_str());
-        p3 = Fmt(T(S_TOTAL), FormatSize(ToU64(g_last.Get(L"liferead"))).c_str(), FormatSize(ToU64(g_last.Get(L"lifewritten"))).c_str());
+        wchar_t sel = g_list ? SelectedLetter() : 0;
+        if (const KV* kv = sel ? FindVolume(sel) : nullptr) {
+            std::wstring le = Get(*kv, L"lasterror");
+            std::wstring st = Get(*kv, L"state");
+            if (!le.empty()) p0 = L"⚠ " + std::wstring(1, sel) + L": " + le;
+            else if (st == L"dismounted") p0 = Fmt(T(S_SEL_DISMOUNTED), sel);
+            else {
+                p0 = Fmt(T(S_SEL_INFO), sel, FormatSize(ToU64(Get(*kv, L"used"))).c_str(), FormatSize(ToU64(Get(*kv, L"memory"))).c_str(),
+                         Get(*kv, L"files").c_str());
+                std::wstring ls = Get(*kv, L"lastsave");
+                if (!ls.empty()) p0 += Fmt(T(S_SEL_SAVED), DisplayTime(ls).c_str());
+            }
+        }
     } else {
         p0 = T(S_SVC_NONE);
     }
-    // Warnung des ausgewaehlten Laufwerks (z. B. Image defekt, Defender-Ausnahme nicht moeglich)
-    if (g_online && g_list) {
-        wchar_t sel = SelectedLetter();
-        if (const KV* kv = sel ? FindVolume(sel) : nullptr) {
-            std::wstring le = Get(*kv, L"lasterror");
-            if (!le.empty()) p0 = L"⚠ " + std::wstring(1, sel) + L": " + le;
-        }
-    }
     if (g_busy > 0) p0 = g_busyText;
     else if (!g_flash.empty() && GetTickCount64() < g_flashUntil) p0 = g_flash;
-    // Teilbreiten nach Textbreite
     HDC dc = GetDC(g_status);
     HGDIOBJ of = SelectObject(dc, g_font);
     auto tw = [&](const std::wstring& s) {
         SIZE sz{};
         GetTextExtentPoint32W(dc, s.c_str(), (int)s.size(), &sz);
-        return (int)sz.cx + S(20);
+        return (int)sz.cx + S(24);
     };
     RECT src{};
     GetClientRect(g_status, &src);
-    int w0 = std::min(std::max(tw(p0), S(200)), std::max((int)src.right * 55 / 100, S(200))), w1 = tw(p1), w2 = tw(p2);
+    int w2 = tw(p2), w1 = tw(p1);
     SelectObject(dc, of);
     ReleaseDC(g_status, dc);
-    int parts[4] = { w0, w0 + w1, w0 + w1 + w2, -1 };
-    SendMessageW(g_status, SB_SETPARTS, 4, (LPARAM)parts);
+    int w0 = std::max(S(120), (int)src.right - w1 - w2 - S(16));
+    int parts[3] = { w0, w0 + w1, -1 };
+    SendMessageW(g_status, SB_SETPARTS, 3, (LPARAM)parts);
     SendMessageW(g_status, SB_SETTEXTW, 0, (LPARAM)p0.c_str());
     SendMessageW(g_status, SB_SETTEXTW, 1, (LPARAM)p1.c_str());
     SendMessageW(g_status, SB_SETTEXTW, 2, (LPARAM)p2.c_str());
-    SendMessageW(g_status, SB_SETTEXTW, 3, (LPARAM)p3.c_str());
+
+    // Speicherleiste: RAM-Laufwerke | frei | andere Programme
+    if (g_membar) {
+        unsigned long long disks = 0;
+        for (auto& [name, kv] : g_last.sections) disks += ToU64(Get(kv, L"memory"));
+        unsigned long long total = ToU64(g_last.Get(L"ramtotal")), freeMem = ToU64(g_last.Get(L"ramfree"));
+        if (!g_online) {
+            MEMORYSTATUSEX ms{ sizeof ms };
+            GlobalMemoryStatusEx(&ms);
+            total = ms.ullTotalPhys;
+            freeMem = ms.ullAvailPhys;
+        }
+        unsigned long long other = total > freeMem + disks ? total - freeMem - disks : 0;
+        MemBarSet(g_membar, disks, freeMem, total, Fmt(T(S_MEM_DISKS), FormatSize(disks).c_str()),
+                  Fmt(T(S_MEM_FREE), FormatSize(freeMem).c_str()), Fmt(T(S_MEM_OTHER), FormatSize(other).c_str()));
+    }
 }
 
 void UpdateButtons()
@@ -277,8 +372,10 @@ void UpdateButtons()
         idle && kv && mounted,
         idle && kv && mounted,        // Speichern
         kv && (mounted || st == L"saving"),  // Oeffnen
+        true,                         // Einstellungen
     };
-    for (int i = 0; i < kBtnCount; i++) EnableWindow(g_btn[i], en[i]);
+    for (int i = 0; i < kBtnCount; i++)
+        if ((IsWindowEnabled(g_btn[i]) != FALSE) != en[i]) EnableWindow(g_btn[i], en[i]);
 }
 
 int MountedCount()
@@ -351,6 +448,7 @@ HMENU BuildMenu()
     AppendMenuW(tools, MF_STRING, CMD_SETTINGS, T(S_M_SETTINGS));
     AppendMenuW(tools, MF_SEPARATOR, 0, nullptr);
     AppendMenuW(tools, MF_STRING, CMD_LOG, T(S_M_LOG));
+    AppendMenuW(tools, MF_STRING, CMD_STATS, T(S_M_STATS));
     AppendMenuW(tools, MF_STRING, CMD_RESETSTATS, T(S_M_RESETSTATS));
     AppendMenuW(tools, MF_SEPARATOR, 0, nullptr);
     AppendMenuW(tools, MF_STRING, CMD_RECONNECT, T(S_M_RECONNECT));
@@ -383,6 +481,7 @@ void UpdateMenuState(HMENU m)
     en(CMD_EXPLORE, kv && st != L"dismounted");
     en(CMD_TEMP, idle);
     en(CMD_RESETSTATS, idle);
+    en(CMD_STATS, g_online);
     en(CMD_QUITPORTABLE, idle && g_last.Get(L"mode") == L"portable");
     en(CMD_RECONNECT, !g_online);
 }
@@ -407,11 +506,12 @@ void ApplyFont()
     NONCLIENTMETRICSW ncm{ sizeof ncm };
     SystemParametersInfoForDpi(SPI_GETNONCLIENTMETRICS, sizeof ncm, &ncm, 0, g_dpi);
     g_font = CreateFontIndirectW(&ncm.lfMessageFont);
-    for (int i = 0; i < kBtnCount; i++) SendMessageW(g_btn[i], WM_SETFONT, (WPARAM)g_font, TRUE);
     SendMessageW(g_list, WM_SETFONT, (WPARAM)g_font, TRUE);
     SendMessageW(g_status, WM_SETFONT, (WPARAM)g_font, TRUE);
+    SendMessageW(g_membar, WM_SETFONT, (WPARAM)g_font, TRUE);
 }
 
+// Aufbau: Symbolleiste | Liste | Speicherleiste | Statuszeile
 void Layout()
 {
     RECT rc;
@@ -420,25 +520,37 @@ void Layout()
     RECT sr;
     GetWindowRect(g_status, &sr);
     int sh = sr.bottom - sr.top;
-    int m = S(8), bh = S(30);
-    HDC dc = GetDC(g_main);
-    HGDIOBJ of = SelectObject(dc, g_font);
+    int m = S(8), bs = S(42);
+    g_toolTop = S(6);
+    g_toolBottom = g_toolTop + bs;
     int x = m;
+    g_sepX.clear();
     for (int i = 0; i < kBtnCount; i++) {
-        wchar_t t[128];
-        GetWindowTextW(g_btn[i], t, 128);
-        SIZE sz{};
-        GetTextExtentPoint32W(dc, t, (int)wcslen(t), &sz);
-        int w = std::max<int>(sz.cx + S(24), S(84));
-        MoveWindow(g_btn[i], x, m, w, bh, TRUE);
-        x += w + S(6);
-        if (i == 2 || i == 4) x += S(10);
+        MoveWindow(g_btn[i], x, g_toolTop, bs, bs, TRUE);
+        x += bs + S(4);
+        if (kSepAfter[i]) {
+            g_sepX.push_back(x + S(5));
+            x += S(14);
+        }
     }
-    SelectObject(dc, of);
-    ReleaseDC(g_main, dc);
-    int top = m + bh + m;
-    MoveWindow(g_list, m, top, rc.right - 2 * m, std::max(0, (int)rc.bottom - sh - top - m), TRUE);
+    int top = g_toolBottom + S(6);
+    int barH = S(30);
+    int barTop = (int)rc.bottom - sh - S(8) - barH;
+    MoveWindow(g_list, m, top, rc.right - 2 * m, std::max(0, barTop - S(8) - top), TRUE);
+    MoveWindow(g_membar, m, barTop, rc.right - 2 * m, barH, TRUE);
+    RECT tb{ 0, 0, rc.right, g_toolBottom + S(2) };
+    InvalidateRect(g_main, &tb, TRUE);
     UpdateStatus();
+}
+
+// Hell/Dunkel gewechselt: Fenster, Symbole und Kurzhilfe neu einfaerben
+void ApplyThemeAll()
+{
+    ThemeApply(g_main);
+    BuildIcons();
+    if (g_tip) SetWindowTheme(g_tip, IsDark() ? L"DarkMode_Explorer" : nullptr, nullptr);
+    for (HWND b : g_btn) InvalidateRect(b, nullptr, TRUE);
+    InvalidateRect(g_membar, nullptr, FALSE);
 }
 
 // ----------------------------------------------------------------------- Befehle
@@ -717,6 +829,19 @@ void CmdResetStats()
     Refresh();
 }
 
+// Gesamtzaehler und Hoechstwerte (frueher in der Statuszeile)
+void CmdStats()
+{
+    Refresh();
+    if (!g_online) { ShowError(T(S_SVC_NONE)); return; }
+    unsigned long long up = ToU64(g_last.Get(L"uptime"));
+    std::wstring upText = Fmt(L"%llu h %02llu min", up / 3600, (up / 60) % 60);
+    MsgBox(g_main, Fmt(T(S_STATS_TEXT), DisplayTime(g_last.Get(L"since")).c_str(),
+                       FormatSize(ToU64(g_last.Get(L"liferead"))).c_str(), FormatSize(ToU64(g_last.Get(L"lifewritten"))).c_str(),
+                       FormatSize(ToU64(g_last.Get(L"peakread"))).c_str(), FormatSize(ToU64(g_last.Get(L"peakwrite"))).c_str(),
+                       upText.c_str()), MB_ICONINFORMATION);
+}
+
 void ShowMain()
 {
     if (IsIconic(g_main)) ShowWindow(g_main, SW_RESTORE);
@@ -825,7 +950,7 @@ void OnCommand(int id)
     case CMD_SETTINGS:
         if (DlgSettings(g_main)) {
             ApplyLanguage();
-            ThemeApply(g_main);
+            ApplyThemeAll();
         }
         Refresh();
         break;
@@ -833,6 +958,7 @@ void OnCommand(int id)
     case CMD_RECONNECT: CmdReconnect(); break;
     case CMD_QUITPORTABLE: CmdQuitPortable(); break;
     case CMD_RESETSTATS: CmdResetStats(); break;
+    case CMD_STATS: CmdStats(); break;
     case CMD_ABOUT: DlgAbout(g_main); break;
     case CMD_KOFI: OpenUrl(L"https://ko-fi.com/C5H12AP4UV"); break;
     case CMD_SHOW: ShowMain(); break;
@@ -856,25 +982,59 @@ LRESULT CALLBACK MainProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
     case WM_SETTINGCHANGE:
     case WM_SYSCOLORCHANGE:
         // Windows-Farbmodus oder Kontrastdesign geaendert: bei "Wie Windows" sofort umschalten
-        if (ThemeUpdate()) ThemeApply(hwnd);
+        if (ThemeUpdate()) ApplyThemeAll();
         break;
     case WM_CREATE: {
         g_main = hwnd;
         g_dpi = GetDpiForWindow(hwnd);
-        for (int i = 0; i < kBtnCount; i++)
-            g_btn[i] = CreateWindowExW(0, L"BUTTON", T(kBtnText[i]), WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_PUSHBUTTON,
+        // Symbolleiste: gezeichnete Knoepfe mit Kurzhilfe (Text bleibt fuer Bildschirmleser gesetzt)
+        g_tip = CreateWindowExW(WS_EX_TOPMOST, TOOLTIPS_CLASSW, nullptr, WS_POPUP | TTS_ALWAYSTIP | TTS_NOPREFIX,
+            CW_USEDEFAULT, CW_USEDEFAULT, CW_USEDEFAULT, CW_USEDEFAULT, hwnd, nullptr, g_inst, nullptr);
+        for (int i = 0; i < kBtnCount; i++) {
+            g_btn[i] = CreateWindowExW(0, L"BUTTON", T(kBtnText[i]), WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_OWNERDRAW,
                 0, 0, 10, 10, hwnd, (HMENU)(INT_PTR)(ID_BTN_FIRST + i), g_inst, nullptr);
+            ToolButtonAttach(g_btn[i]);
+            TTTOOLINFOW ti{ sizeof ti };
+            ti.uFlags = TTF_IDISHWND | TTF_SUBCLASS;
+            ti.hwnd = hwnd;
+            ti.uId = (UINT_PTR)g_btn[i];
+            ti.lpszText = LPSTR_TEXTCALLBACKW;
+            SendMessageW(g_tip, TTM_ADDTOOLW, 0, (LPARAM)&ti);
+        }
         g_list = CreateWindowExW(WS_EX_CLIENTEDGE, WC_LISTVIEWW, L"", WS_CHILD | WS_VISIBLE | WS_TABSTOP | LVS_REPORT |
             LVS_SINGLESEL | LVS_SHOWSELALWAYS, 0, 0, 10, 10, hwnd, (HMENU)(INT_PTR)ID_LIST, g_inst, nullptr);
         ListView_SetExtendedListViewStyle(g_list, LVS_EX_FULLROWSELECT | LVS_EX_DOUBLEBUFFER | LVS_EX_LABELTIP);
         SetWindowTheme(g_list, L"Explorer", nullptr);
+        g_membar = MemBarCreate(g_inst, hwnd, ID_MEMBAR);
         g_status = CreateWindowExW(0, STATUSCLASSNAMEW, L"", WS_CHILD | WS_VISIBLE | SBARS_SIZEGRIP, 0, 0, 0, 0, hwnd,
             (HMENU)(INT_PTR)ID_STATUS, g_inst, nullptr);
         ApplyFont();
         SetColumns();
         SetMenu(hwnd, BuildMenu());
-        ThemeApply(hwnd);
+        ApplyThemeAll();
         SetTimer(hwnd, TIMER_REFRESH, 1000, nullptr);
+        return 0;
+    }
+    case WM_DRAWITEM: {
+        DRAWITEMSTRUCT* di = (DRAWITEMSTRUCT*)lp;
+        int i = (int)di->CtlID - ID_BTN_FIRST;
+        if (i >= 0 && i < kBtnCount) {
+            ToolButtonDraw(di, kBtnGlyph[i], TintColor(kBtnTint[i]));
+            return TRUE;
+        }
+        break;
+    }
+    case WM_PAINT: {
+        // Trennstriche zwischen den Gruppen der Symbolleiste
+        PAINTSTRUCT ps;
+        HDC dc = BeginPaint(hwnd, &ps);
+        HBRUSH br = CreateSolidBrush(IsDark() ? Colors().border : GetSysColor(COLOR_3DSHADOW));
+        for (int x : g_sepX) {
+            RECT r{ x, g_toolTop + S(8), x + std::max(1, S(1)), g_toolBottom - S(8) };
+            FillRect(dc, &r, br);
+        }
+        DeleteObject(br);
+        EndPaint(hwnd, &ps);
         return 0;
     }
     case WM_SIZE:
@@ -885,6 +1045,7 @@ LRESULT CALLBACK MainProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
         RECT* r = (RECT*)lp;
         SetWindowPos(hwnd, nullptr, r->left, r->top, r->right - r->left, r->bottom - r->top, SWP_NOZORDER | SWP_NOACTIVATE);
         ApplyFont();
+        BuildIcons();
         Layout();
         return 0;
     }
@@ -913,8 +1074,15 @@ LRESULT CALLBACK MainProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
         return 0;
     case WM_NOTIFY: {
         NMHDR* nh = (NMHDR*)lp;
+        if (nh->code == TTN_GETDISPINFOW) {
+            NMTTDISPINFOW* di = (NMTTDISPINFOW*)lp;
+            for (int i = 0; i < kBtnCount; i++)
+                if ((HWND)di->hdr.idFrom == g_btn[i]) di->lpszText = (LPWSTR)T(kBtnText[i]);
+            return 0;
+        }
+        if (nh->hwndFrom == g_list && nh->code == NM_CUSTOMDRAW) return ListCustomDraw((NMLVCUSTOMDRAW*)lp);
         if (nh->idFrom == ID_LIST) {
-            if (nh->code == LVN_ITEMCHANGED) UpdateButtons();
+            if (nh->code == LVN_ITEMCHANGED) { UpdateButtons(); UpdateStatus(); }
             else if (nh->code == NM_DBLCLK) {
                 if (SelectedLetter()) {
                     const KV* kv = FindVolume(SelectedLetter());
@@ -1063,7 +1231,7 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, LPWSTR cmdLine, int)
             SetWindowPlacement(hwnd, &wpl);
             if (p[4] == L"1") wpl.showCmd = SW_SHOWMAXIMIZED;
         } else {
-            SetWindowPos(hwnd, nullptr, 0, 0, MulDiv(980, dpi, 96), MulDiv(440, dpi, 96), SWP_NOMOVE | SWP_NOZORDER);
+            SetWindowPos(hwnd, nullptr, 0, 0, MulDiv(940, dpi, 96), MulDiv(460, dpi, 96), SWP_NOMOVE | SWP_NOZORDER);
         }
     }
 
