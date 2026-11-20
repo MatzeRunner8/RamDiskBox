@@ -74,8 +74,8 @@ RamDiskBoxSvc.exe install | uninstall      (administrator)
 
 About 1.2 GB/s write and 2.5–3 GB/s read for a 256 MB file, on par with WinFsp's reference `memfs`.
 
-- Kernel-mode RAM disks write large files faster.
-- Creating many small files is slowed by Windows Defender real-time scanning, as on every WinFsp drive.
+- Many small files: Windows Defender real-time scanning is the main brake. With "Exclude from Defender real-time protection", creating, opening and reading were 19 to 41 times faster in tests (e.g. 4,400 instead of 230 new 64 KB files per second). In service mode RamDiskBox also keeps the Windows cache, which speeds up re-reading even without the exclusion.
+- Benchmarks without the Windows cache (CrystalDiskMark, DiskSpd): about 2.6 GB/s read, 5 GB/s write and 150–300 MB/s for 4K access. That is WinFsp's limit, since every access goes from the kernel to the service and back; WinFsp's own `memfs` measures the same. RAM disks with their own kernel driver are many times faster here.
 - Data lives in the RamDiskBox process and may be paged out under severe memory pressure.
 - With compression the first read of a compressed file runs at about 1.4–1.5 GB/s; zstd compresses at about 85 MB/s in the background.
 - No hard links.

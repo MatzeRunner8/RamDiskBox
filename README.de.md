@@ -142,8 +142,8 @@ Gemessen auf einem PC mit 128 GB RAM (256-MB-Datei, .NET `File.WriteAllBytes`/`R
 etwa **1,2 GB/s schreiben** und **2,5–3 GB/s lesen**. RamDiskBox läuft als Dateisystem im Benutzermodus über
 WinFsp und ist damit so schnell wie WinFsps eigenes Referenz-Dateisystem `memfs`.
 
-- Reine Kernel-RAM-Disks schreiben große Dateien schneller.
-- Beim Anlegen sehr vieler kleiner Dateien bremst der Echtzeitscan von Windows Defender, wie bei allen WinFsp-Laufwerken.
+- **Viele kleine Dateien:** Hier bremst vor allem der Echtzeitscan von Windows Defender. Mit der Option „Vom Defender-Echtzeitschutz ausnehmen“ waren Anlegen, Öffnen und Lesen im Test 19- bis 41-mal schneller (zum Beispiel 4.400 statt 230 neue 64-KB-Dateien pro Sekunde). Im Dienstmodus behält RamDiskBox außerdem den Windows-Cache, das beschleunigt erneutes Lesen auch ohne Ausnahme.
+- **Benchmarks ohne Windows-Cache** (CrystalDiskMark, DiskSpd): RamDiskBox erreicht rund 2,6 GB/s lesend, 5 GB/s schreibend und 150–300 MB/s bei 4K-Zugriffen. Das ist die Grenze von WinFsp, denn jeder Zugriff geht vom Kernel in den Dienst und zurück; WinFsps eigenes `memfs` misst genauso. RAM-Disks mit eigenem Kerneltreiber sind hier um ein Vielfaches schneller.
 - Der Inhalt liegt im Speicher des RamDiskBox-Prozesses. Bei akutem Speichermangel kann Windows Teile davon in die Auslagerungsdatei verschieben.
 - Mit Komprimierung liest das erste Öffnen einer komprimierten Datei mit etwa 1,4–1,5 GB/s (256 MB Text, alle Stufen). zstd komprimiert im Hintergrund rund 85 MB/s.
 - Keine festen Links (WinFsp unterstützt sie nicht).

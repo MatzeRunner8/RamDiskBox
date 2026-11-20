@@ -1096,7 +1096,9 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, PWSTR, int)
         if (found.found && !o.userSet) o.allUsers = found.allUsers;
         if (o.dir.empty() && found.found && found.allUsers == o.allUsers) o.dir = found.dir;
         if (o.dir.empty()) o.dir = DefaultDir(o.allUsers);
-        if (!o.autostartSet) o.autostart = !o.allUsers;
+        // Autostart: ohne Dienst noetig; bei einer Aktualisierung den bisherigen Zustand behalten
+        if (!o.autostartSet)
+            o.autostart = !o.allUsers || Lower(RunValue()).find(Lower(Join(o.dir, kGuiExe))) != wstring::npos;
         if (!NormalizeDir(o.dir)) r = EXIT_FAILED;
         else if (Prepare(o, nullptr, r)) {
             r = InstallWithElevation(nullptr, o);

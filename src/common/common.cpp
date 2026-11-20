@@ -448,6 +448,14 @@ int ParseCompress(const std::wstring& s, int def)
     return -1;
 }
 
+bool ProcessIsAdmin()
+{
+    BYTE sid[SECURITY_MAX_SID_SIZE];
+    DWORD sz = sizeof sid;
+    BOOL member = FALSE;
+    return CreateWellKnownSid(WinBuiltinAdministratorsSid, nullptr, sid, &sz) && CheckTokenMembership(nullptr, sid, &member) && member;
+}
+
 bool IsRememberedNetworkLetter(wchar_t letter)
 {
     // Dauerhaft verbundene Netzlaufwerke stehen unter HKCU\Network\<Buchstabe>, auch wenn sie gerade

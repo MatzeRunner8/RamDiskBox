@@ -1,5 +1,19 @@
 # Änderungen / Changelog
 
+## 1.5.0 (Build 8)
+
+- **Schneller im Dienstmodus:** Der Windows-Cache bleibt beim Schließen einer Datei erhalten. Erneutes Öffnen und Lesen ist damit bei aktivem Defender rund 30-mal so schnell (gemessen: 7.200 statt 260 kleine Dateien pro Sekunde). Vor jeder Image-Sicherung wird das Laufwerk zurückgeschrieben; klappt das nicht, wird das Image nicht gespeichert und eine Meldung erscheint. Ohne Dienst bleibt es beim bisherigen, sicheren Verhalten.
+- **Defender-Ausnahme per UAC:** Einstellungen, die der Dienst nur von Administratoren annimmt (Defender-Ausnahme, Quellordner, Image außerhalb des Image-Ordners), übernimmt die Oberfläche jetzt nach Rückfrage mit Administratorrechten. Die Defender-Ausnahme macht das Anlegen und Öffnen vieler kleiner Dateien gemessen 19- bis 41-mal schneller.
+- **Behoben (Setup):** Ein stilles Update (`/quiet`) entfernte den Autostart der Oberfläche.
+- `rdbctl` versteht `--instance=NAME` und `--lang=de|en` als führende Optionen.
+
+**English**
+
+- **Faster in service mode:** the Windows cache is kept when a file is closed. With Defender active, re-opening and reading are about 30 times faster (measured: 7,200 instead of 260 small files per second). Before every image backup the drive is written back; if that fails, the image is not saved and a message is shown. Without the service the previous safe behavior stays.
+- **Defender exclusion via UAC:** settings that the service accepts only from administrators (Defender exclusion, source folder, image outside the image folder) are now applied by the user interface with administrator rights after asking. In measurements the Defender exclusion made creating and opening many small files 19 to 41 times faster.
+- **Fixed (setup):** a quiet update (`/quiet`) removed the user interface's autostart.
+- `rdbctl` accepts `--instance=NAME` and `--lang=de|en` as leading options.
+
 ## 1.4.1 (Build 7)
 
 - **Behoben:** Ein beim Einhängen gesperrtes oder nicht lesbares Image (z. B. von einem Sicherungsprogramm geöffnet, fehlende Rechte) wurde fälschlich als beschädigt behandelt. Das Laufwerk startete dann leer und überschrieb beim Aushängen das gute Image. Jetzt wird das Laufwerk in diesem Fall nicht eingehängt, und die Meldung nennt den Grund. Dasselbe gilt, wenn der Speicherort des Images nicht erreichbar ist (Netz- oder USB-Laufwerk fehlt).

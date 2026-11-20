@@ -292,6 +292,7 @@ bool Host::MountVolume(Volume& v, std::wstring& err)
     o.label = v.cfg.label;
     o.reportNtfs = v.cfg.reportNtfs;
     o.useCache = v.cfg.useCache;
+    o.keepCache = serviceMode_ || ProcessIsAdmin();   // dann klappt der Volume-Flush vor dem Image-Speichern
     o.wipe = v.cfg.wipe;
     o.compress = v.cfg.compress;
     std::unique_ptr<RamFs> fs;
@@ -592,6 +593,15 @@ Message Host::CmdList()
     return m;
 }
 
+// Ablehnung, die mit Administratorrechten klappen wuerde: needadmin=1, damit die Oberflaeche anbieten
+// kann, die Aenderung per UAC zu uebernehmen.
+static Message NeedAdmin(const std::wstring& err)
+{
+    Message m = Message::Err(err);
+    m.args[L"needadmin"] = L"1";
+    return m;
+}
+
 // Liegt die Datei direkt im Image-Ordner des Dienstes (kein Unterordner, kein Datenstrom)?
 static bool InImagesDir(const std::wstring& p)
 {
@@ -637,7 +647,7 @@ Message Host::CmdCreate(const Message& req, bool clientAdmin)
     std::wstring err;
     if (!VolumeConfig::FromKV(req.args, c, err)) return Message::Err(err);
     if (!ValidateConfig(c, 0, err)) return Message::Err(err);
-    if (!CheckPrivileged(c, nullptr, clientAdmin, err)) return Message::Err(err);
+    if (!CheckPrivileged(c, nullptr, clientAdmin, err)) return NeedAdmin(err);
     if (Get(c.letter)) return Message::Err(TrF(L"Für %c: gibt es bereits ein RAM-Laufwerk.", L"A RAM drive for %c: already exists.", c.letter));
     bool mount = ToBool(req.Get(L"mount", L"1"), true);
     if (mount && IsDriveLetterUsed(c.letter)) return Message::Err(TrF(L"Laufwerk %c: ist bereits belegt.", L"Drive %c: is already in use.", c.letter));
@@ -667,7 +677,7 @@ Message Host::CmdUpdate(const Message& req, bool clientAdmin)
     if (!v) return Message::Err(TrF(L"Kein RAM-Laufwerk %c:.", L"No RAM drive %c:.", c.letter));
     if (!ValidateConfig(c, c.letter, err)) return Message::Err(err);
     std::lock_guard<std::mutex> g(v->op);
-    if (!CheckPrivileged(c, &v->cfg, clientAdmin, err)) return Message::Err(err);
+    if (!CheckPrivileged(c, &v->cfg, clientAdmin, err)) return NeedAdmin(err);
     if (v->fs) {
         if (c.size != v->cfg.size && !v->fs->Resize(c.size, err)) return Message::Err(err);
         if (c.compress != v->cfg.compress) v->fs->SetCompression(c.compress);   // sofort wirksam
@@ -779,7 +789,7 @@ Message Host::CmdSave(const Message& req, bool clientAdmin)
         VolumeConfig c = v->cfg;
         c.image = path;
         if (!ValidateConfig(c, c.letter, err)) return Message::Err(err);
-        if (!CheckPrivileged(c, &v->cfg, clientAdmin, err)) return Message::Err(err);
+        if (!CheckPrivileged(c, &v->cfg, clientAdmin, err)) return NeedAdmin(err);
     }
     if (!SaveVolume(*v, path.empty() ? v->cfg.image : path, err)) return Message::Err(err);
     if (!path.empty() && ToBool(req.Get(L"bind", L"1"), true)) {

@@ -235,6 +235,16 @@ static int CmdList()
 
 int wmain(int argc, wchar_t** argv)
 {
+    // Fuehrende Optionen --instance=NAME (Testinstanz wie RDB_INSTANCE) und --lang=de|en; die Oberflaeche
+    // gibt sie mit, wenn sie rdbctl mit Administratorrechten startet (dabei geht die Umgebung verloren).
+    while (argc >= 2 && wcsncmp(argv[1], L"--", 2) == 0) {
+        std::wstring o = argv[1];
+        if (_wcsnicmp(o.c_str(), L"--instance=", 11) == 0) SetEnvironmentVariableW(L"RDB_INSTANCE", o.c_str() + 11);
+        else if (_wcsnicmp(o.c_str(), L"--lang=", 7) == 0) SetEnvironmentVariableW(L"RDB_LANG", o.c_str() + 7);
+        else break;
+        argv++;
+        argc--;
+    }
     // Sprache: RDB_LANG=de|en, sonst Windows-Anzeigesprache; PipeCall gibt sie an den Dienst weiter.
     SetProcessLanguage(DefaultLanguage());
     if (argc < 2) { Usage(); return 0; }

@@ -26,20 +26,11 @@ std::wstring HrText(HRESULT hr)
 
 template <class T> void Rel(T*& p) { if (p) { p->Release(); p = nullptr; } }
 
-// Laeuft der Prozess mit Administratorrechten (erhoeht) oder als SYSTEM? Ohne diese Rechte
-// meldet Defender nur ein nichtssagendes WBEM_E_FAILED (0x80041001).
-bool ProcessIsAdmin()
-{
-    BYTE sid[SECURITY_MAX_SID_SIZE];
-    DWORD sz = sizeof sid;
-    BOOL member = FALSE;
-    return CreateWellKnownSid(WinBuiltinAdministratorsSid, nullptr, sid, &sz) && CheckTokenMembership(nullptr, sid, &member) && member;
-}
-
 } // namespace
 
 bool DefenderExclusion(bool add, const std::wstring& path, std::wstring& err)
 {
+    // Ohne Administrator- bzw. SYSTEM-Rechte meldet Defender nur ein nichtssagendes WBEM_E_FAILED.
     if (!ProcessIsAdmin()) {
         err = Tr(L"Nur im Dienstmodus bzw. mit Administratorrechten möglich.",
                  L"Only possible in service mode or with administrator rights.");

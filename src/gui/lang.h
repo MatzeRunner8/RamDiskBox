@@ -39,6 +39,8 @@ enum Str {
     // 1.3: Darstellung, Sprache automatisch, Meldungsknoepfe, Hintergrundprozess
     S_SD_THEME, S_THEME_SYSTEM, S_THEME_LIGHT, S_THEME_DARK, S_LANG_AUTO, S_BTN_YES, S_BTN_NO,
     S_HOST_START_FAILED, S_HOST_NO_RIGHTS, S_HOST_MISSING, S_HOST_EXITED,
+    // 1.5: Aenderung mit Administratorrechten uebernehmen
+    S_NEED_ADMIN_Q, S_ELEVATED_FAIL,
     S_COUNT
 };
 

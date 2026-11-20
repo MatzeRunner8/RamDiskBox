@@ -124,6 +124,7 @@ const wchar_t* CompressName(int level);            // off, fast, normal, max
 int ParseCompress(const std::wstring& s, int def); // Name oder Ziffer, -1 = ungueltig
 bool IsDriveLetterUsed(wchar_t letter);           // belegt, verbunden oder fuer ein getrenntes Netzlaufwerk gemerkt
 bool IsRememberedNetworkLetter(wchar_t letter);   // HKCU\Network\<Buchstabe> (des aufrufenden Benutzers)
+bool ProcessIsAdmin();                            // erhoehte Administratorrechte oder SYSTEM
 
 // INI (UTF-16, liegt neben der EXE)
 struct Ini {

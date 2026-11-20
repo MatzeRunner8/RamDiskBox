@@ -454,6 +454,62 @@ void JobResult(Job& j, const std::wstring& okFlash)
     }
 }
 
+// Ein Argument fuer die Befehlszeile (Regeln von CommandLineToArgvW: Backslashes vor Anfuehrungszeichen verdoppeln)
+std::wstring ArgQuote(const std::wstring& s)
+{
+    if (!s.empty() && s.find_first_of(L" \t\"") == std::wstring::npos) return s;
+    std::wstring r = L"\"";
+    size_t bs = 0;
+    for (wchar_t ch : s) {
+        if (ch == L'\\') { bs++; continue; }
+        if (ch == L'"') { r.append(bs * 2 + 1, L'\\'); r += L'"'; bs = 0; continue; }
+        r.append(bs, L'\\');
+        bs = 0;
+        r += ch;
+    }
+    r.append(bs * 2, L'\\');
+    return r + L"\"";
+}
+
+// Alle Einstellungen eines Laufwerks als rdbctl-Optionen
+std::wstring CtlArgs(const VolumeConfig& c)
+{
+    std::wstring a = U64(c.size) + L"b";
+    a += L" " + ArgQuote(L"label=" + c.label);
+    a += L" " + ArgQuote(L"folders=" + c.folders);
+    a += L" " + ArgQuote(L"image=" + c.image);
+    a += L" " + ArgQuote(L"source=" + c.source);
+    a += L" autosave=" + U64(c.autoSaveMin);
+    a += std::wstring(L" compress=") + CompressName(c.compress);
+    a += c.loadImage ? L" load" : L" noload";
+    a += c.saveImage ? L" save" : L" nosave";
+    a += c.compressImage ? L" compress" : L" nocompress";
+    a += c.autoMount ? L" auto" : L" noauto";
+    a += c.reportNtfs ? L" ntfs" : L" nontfs";
+    a += c.useCache ? L" cache" : L" nocache";
+    a += c.wipe ? L" wipe" : L" nowipe";
+    a += c.avExclude ? L" avexclude" : L" noavexclude";
+    return a;
+}
+
+// Der Dienst nimmt manche Einstellungen nur von Administratoren an (Defender-Ausnahme, Quellordner,
+// Image ausserhalb des Image-Ordners): anbieten, sie per UAC ueber rdbctl zu uebernehmen.
+bool ApplyElevated(const VolumeConfig& c, bool create, const std::wstring& reason, bool mount = true)
+{
+    if (MsgBox(g_main, Fmt(T(S_NEED_ADMIN_Q), reason.c_str()), MB_ICONQUESTION | MB_YESNO) != IDYES) return false;
+    std::wstring args;
+    std::wstring inst = InstanceSuffix();
+    if (!inst.empty()) args += L"--instance=" + inst.substr(1) + L" ";
+    args += std::wstring(L"--lang=") + LangCode(CurrentLanguage()) + L" ";
+    args += create ? L"create " : L"update ";
+    args += std::wstring(1, c.letter) + L" " + CtlArgs(c);
+    if (create && !mount) args += L" nomount";
+    int code = RunElevated(g_main, ExePath(L"rdbctl.exe"), args);
+    if (code == 0) { Flash(T(S_DONE)); return true; }
+    if (code != -1) ShowError(Fmt(T(S_ELEVATED_FAIL), code));
+    return false;
+}
+
 wchar_t SuggestLetter()
 {
     std::vector<wchar_t> free = FreeLetters(0);
@@ -478,7 +534,10 @@ void CmdNew()
     req.args = c.ToKV();
     req.args[L"mount"] = L"1";
     wchar_t l = c.letter;
-    RunAsync(req, Fmt(T(S_WORKING_CREATE), l), [](Job& j) { JobResult(j, T(S_DONE)); });
+    RunAsync(req, Fmt(T(S_WORKING_CREATE), l), [c](Job& j) {
+        if (!j.ok && j.resp.Get(L"needadmin") == L"1") { ApplyElevated(c, true, j.err); return; }
+        JobResult(j, T(S_DONE));
+    });
 }
 
 void CmdEdit()
@@ -500,7 +559,15 @@ void CmdEdit()
         cr.cmd = L"CREATE";
         cr.args = c.ToKV();
         cr.args[L"mount"] = L"0";
-        if (!PipeCall(cr, resp, &err)) { ShowError(err); Refresh(); return; }
+        if (!PipeCall(cr, resp, &err)) {
+            bool done = false;
+            if (resp.Get(L"needadmin") == L"1") {
+                done = ApplyElevated(c, true, err, false);
+            } else {
+                ShowError(err);
+            }
+            if (!done) { Refresh(); return; }
+        }
         Message del;
         del.cmd = L"DELETE";
         del.args[L"letter"] = std::wstring(1, old.letter);
@@ -511,7 +578,10 @@ void CmdEdit()
     Message req, resp;
     req.cmd = L"UPDATE";
     req.args = c.ToKV();
-    if (!PipeCall(req, resp, &err)) ShowError(err);
+    if (!PipeCall(req, resp, &err)) {
+        if (resp.Get(L"needadmin") == L"1") ApplyElevated(c, false, err);
+        else ShowError(err);
+    }
     Refresh();
 }
 

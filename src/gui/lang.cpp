@@ -174,6 +174,8 @@ const Entry kText[S_COUNT] = {
     /* S_HOST_NO_RIGHTS */ { L"Der RamDiskBox-Dienst ist gestoppt (zum Starten fehlen die Rechte).", L"The RamDiskBox service is stopped (no permission to start it)." },
     /* S_HOST_MISSING */ { L"%s fehlt.", L"%s is missing." },
     /* S_HOST_EXITED */ { L"Der Hintergrundprozess wurde beendet (Code %lu). Details stehen im Protokoll RamDiskBox.log.", L"The background process exited (code %lu). See the log RamDiskBox.log for details." },
+    /* S_NEED_ADMIN_Q */ { L"%s\n\nMit Administratorrechten übernehmen? Windows fragt dann nach der Berechtigung.", L"%s\n\nApply with administrator rights? Windows will then ask for permission." },
+    /* S_ELEVATED_FAIL */ { L"Das Übernehmen mit Administratorrechten ist fehlgeschlagen (Code %d).", L"Applying with administrator rights failed (code %d)." },
 };
 
 static_assert(sizeof(kText) / sizeof(kText[0]) == S_COUNT, "Texttabelle passt nicht zu enum Str");

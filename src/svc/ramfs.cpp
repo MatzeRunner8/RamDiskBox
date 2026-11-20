@@ -126,9 +126,11 @@ NTSTATUS RamFs::Create(const VolumeOptions& opt, GlobalCounters* gc, std::unique
     vp.PostCleanupWhenModifiedOnly = 0;
     vp.PostDispositionWhenNecessaryOnly = 1;
     vp.PassQueryDirectoryFileName = 1;
-    // Beim Schliessen den Windows-Cache zurueckschreiben und verwerfen: Daten liegen dann
-    // sofort im RAM-Laufwerk (wichtig fuer Images) und nicht doppelt im Speicher.
-    vp.FlushAndPurgeOnCleanup = 1;
+    // Windows-Cache beim Schliessen: Behalten macht erneutes Oeffnen und Lesen rund 30-mal schneller
+    // (Treffer bleiben im Kernel). Das geht nur, wenn vor jedem Image-Speichern das ganze Laufwerk
+    // zurueckgeschrieben werden kann (Volume-Flush, braucht Dienstmodus bzw. Administratorrechte).
+    // Sonst beim Schliessen zurueckschreiben und verwerfen, damit Images immer vollstaendig sind.
+    vp.FlushAndPurgeOnCleanup = (opt.useCache && opt.keepCache) ? 0 : 1;
     vp.AllowOpenInKernelMode = 1;
     wcscpy_s(vp.FileSystemName, sizeof vp.FileSystemName / sizeof(WCHAR), opt.reportNtfs ? L"NTFS" : kAppName);
 
@@ -200,19 +202,20 @@ void RamFs::Unmount()
     mounted_ = false;
 }
 
-void RamFs::FlushVolume()
+bool RamFs::FlushVolume()
 {
-    if (!mounted_) return;
-    // Volume-Flush: der WinFsp-Treiber schreibt dabei die Caches aller offenen Dateien zurueck.
-    // Braucht Administrator- bzw. SYSTEM-Rechte; geschlossene Dateien sind dank
-    // FlushAndPurgeOnCleanup ohnehin schon zurueckgeschrieben.
+    if (!mounted_) return true;
+    // Volume-Flush: der WinFsp-Treiber schreibt dabei die Caches aller Dateien zurueck, die er noch
+    // kennt (offen oder vom Windows-Cache gehalten). Braucht Administrator- bzw. SYSTEM-Rechte; ohne
+    // diese Rechte verwirft der Treiber den Cache beim Schliessen (keepCache = false), dann sind
+    // geschlossene Dateien ohnehin schon zurueckgeschrieben.
     wchar_t path[] = L"\\\\.\\X:";
     path[4] = opt_.letter;
     HANDLE h = CreateFileW(path, GENERIC_READ | GENERIC_WRITE, FILE_SHARE_READ | FILE_SHARE_WRITE, nullptr, OPEN_EXISTING, 0, nullptr);
-    if (h != INVALID_HANDLE_VALUE) {
-        FlushFileBuffers(h);
-        CloseHandle(h);
-    }
+    if (h == INVALID_HANDLE_VALUE) return false;
+    BOOL ok = FlushFileBuffers(h);
+    CloseHandle(h);
+    return ok != FALSE;
 }
 
 FsStats RamFs::Stats()

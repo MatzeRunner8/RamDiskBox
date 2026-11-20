@@ -37,6 +37,7 @@ struct VolumeOptions {
     std::wstring label = L"RAMDisk";
     bool reportNtfs = true;
     bool useCache = true;
+    bool keepCache = false;          // Windows-Cache beim Schliessen behalten (nur wenn FlushVolume moeglich ist)
     bool wipe = false;
     int compress = 0;                // 0 aus, 1 schnell (LZ4), 2 normal (LZ4 HC), 3 stark (zstd)
 };
@@ -119,8 +120,8 @@ public:
     std::wstring Label();
     // Von Programmen offen gehaltene Handles (ohne Datei-Objekte, die nur der Windows-Cache haelt)
     unsigned long long OpenHandles() const { return userHandles_.load(); }
-    // Windows-Cache des Laufwerks zurueckschreiben (vor dem Speichern eines Images)
-    void FlushVolume();
+    // Windows-Cache des Laufwerks zurueckschreiben (vor dem Speichern eines Images); false = nicht moeglich
+    bool FlushVolume();
     const VolumeOptions& Options() const { return opt_; }
     // Komprimierung im Arbeitsspeicher (0..3), auch im laufenden Betrieb
     void SetCompression(int level);

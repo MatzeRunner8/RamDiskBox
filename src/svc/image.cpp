@@ -309,7 +309,13 @@ bool RamFs::SaveImage(const std::wstring& path, bool compress, std::wstring& err
             return false;
         }
         if (!CreateParentDirs(path)) { err = Tr(L"Zielordner kann nicht angelegt werden.", L"Cannot create the target folder."); return false; }
-        FlushVolume();   // ohne gehaltene Sperren: der Treiber schreibt dabei ueber uns zurueck
+        // ohne gehaltene Sperren: der Treiber schreibt dabei ueber uns zurueck. Bleibt der Windows-Cache
+        // beim Schliessen erhalten, ist der Flush Pflicht - sonst fehlten juengste Aenderungen im Image.
+        if (!FlushVolume() && opt_.useCache && opt_.keepCache) {
+            err = Tr(L"Der Windows-Cache des Laufwerks konnte nicht zurückgeschrieben werden; das Image wurde nicht gespeichert.",
+                     L"The drive's Windows cache could not be written back; the image was not saved.");
+            return false;
+        }
         std::wstring tmp = path + L".tmp";
         HANDLE h = CreateFileW(tmp.c_str(), GENERIC_WRITE, 0, nullptr, CREATE_ALWAYS,
             FILE_ATTRIBUTE_NORMAL | FILE_FLAG_SEQUENTIAL_SCAN, nullptr);
