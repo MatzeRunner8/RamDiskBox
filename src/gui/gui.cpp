@@ -40,7 +40,7 @@ enum : UINT {
 enum : int {
     CMD_NEW = 40001, CMD_EDIT, CMD_REMOVE, CMD_MOUNT, CMD_DISMOUNT, CMD_SAVE, CMD_SAVEAS, CMD_EXPLORE,
     CMD_TEMP, CMD_SETTINGS, CMD_LOG, CMD_RECONNECT, CMD_QUITPORTABLE, CMD_RESETSTATS,
-    CMD_ABOUT, CMD_KOFI, CMD_EXIT, CMD_SHOW, CMD_REFRESH, CMD_STATS,
+    CMD_ABOUT, CMD_KOFI, CMD_EXIT, CMD_SHOW, CMD_REFRESH, CMD_STATS, CMD_CACHE,
     CMD_TRAY_TOGGLE = 41000,   // + Buchstabe
 };
 
@@ -850,6 +850,7 @@ HMENU BuildMenu()
     AppendMenuW(drive, MF_STRING, CMD_REFRESH, T(S_M_REFRESH));
     HMENU tools = CreatePopupMenu();
     AppendMenuW(tools, MF_STRING, CMD_TEMP, T(S_M_TEMP));
+    AppendMenuW(tools, MF_STRING, CMD_CACHE, T(S_M_CACHE));
     AppendMenuW(tools, MF_STRING, CMD_SETTINGS, T(S_M_SETTINGS));
     AppendMenuW(tools, MF_SEPARATOR, 0, nullptr);
     AppendMenuW(tools, MF_STRING, CMD_LOG, T(S_M_LOG));
@@ -885,6 +886,7 @@ void UpdateMenuState(HMENU m)
     en(CMD_SAVEAS, idle && kv && st == L"mounted");
     en(CMD_EXPLORE, kv && st != L"dismounted");
     en(CMD_TEMP, idle);
+    en(CMD_CACHE, idle);
     en(CMD_RESETSTATS, idle);
     en(CMD_STATS, g_online);
     en(CMD_QUITPORTABLE, idle && g_last.Get(L"mode") == L"portable");
@@ -1382,6 +1384,7 @@ void OnCommand(int id)
     case CMD_SAVEAS: CmdSaveAs(); break;
     case CMD_EXPLORE: CmdExplore(); break;
     case CMD_TEMP: DlgTemp(g_main); Refresh(); break;
+    case CMD_CACHE: Refresh(); DlgCache(g_main); Refresh(); break;
     case CMD_SETTINGS:
         if (DlgSettings(g_main)) {
             ApplyLanguage();

@@ -43,6 +43,7 @@ void RequestRefresh();
 bool DlgVolume(HWND parent, rdb::VolumeConfig& cfg, bool isNew, bool mounted);
 bool DlgSettings(HWND parent);   // true = Sprache oder Darstellung geaendert
 void DlgTemp(HWND parent);
+void DlgCache(HWND parent);   // cache.cpp: Cache von Browsern/Programmen verlagern
 void DlgAbout(HWND parent);
 
 } // namespace gui

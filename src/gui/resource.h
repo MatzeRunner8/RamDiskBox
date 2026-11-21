@@ -6,6 +6,7 @@
 #define IDD_SETTINGS        102
 #define IDD_ABOUT           103
 #define IDD_TEMP            104
+#define IDD_CACHE           105
 
 // Laufwerksdialog
 #define IDC_LETTER          1001
@@ -65,6 +66,17 @@
 #define IDC_L_TEMP_DRIVE    3010
 #define IDC_L_TEMP_FOLDER   3011
 #define IDC_L_TEMP_INFO     3012
+
+// Cache verlagern
+#define IDC_CACHE_INFO      3101
+#define IDC_CACHE_LIST      3102
+#define IDC_L_CACHE_TARGET  3103
+#define IDC_CACHE_DRIVE     3104
+#define IDC_CACHE_FOLDER    3105
+#define IDC_CACHE_HINT      3106
+#define IDC_CACHE_MOVE      3107
+#define IDC_CACHE_RESTORE   3108
+#define IDC_CACHE_REFRESH   3109
 
 // Info
 #define IDC_ABOUT_TITLE     4001

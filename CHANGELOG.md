@@ -1,5 +1,29 @@
 # Änderungen / Changelog
 
+## 1.7.0 (Build 14)
+
+- **Neu: Extras → Cache verlagern …** legt den Cache von Browsern und Programmen auf ein RAM-Laufwerk. Das schont die SSD und kann schneller sein.
+  - Unterstützt: Chrome (auch Beta/Canary), Chromium, Edge (alle Kanäle), Brave, Vivaldi, Yandex, Cent Browser, Comodo Dragon, Ulaa, Opera, Opera GX, Firefox, LibreWolf, Waterfox, Pale Moon, Thunderbird, VS Code (auch Insiders), Discord, Slack, Teams classic, Telegram, Steam und DuckDuckGo.
+  - Bei Chromium-Browsern wird jedes Profil einzeln angezeigt.
+  - Die Liste zeigt Größe und Dateizahl jedes Caches, und ob er schon umgeleitet ist (auch durch andere Programme) oder ob das Ziel fehlt.
+  - Jedes Programm und Profil bekommt einen eigenen Ordner, z. B. `R:\Cache\Chrome-Default`. RamDiskBox trägt ihn in die Ordnerliste des Laufwerks ein und legt ihn so bei jedem Einhängen neu an.
+  - Die Umleitung ist eine Verzeichnisverbindung (Junction) und braucht keine Administratorrechte.
+  - Laufen die betroffenen Programme noch, verweigert RamDiskBox das Verschieben und nennt sie.
+  - Beim Löschen des alten Caches folgt RamDiskBox keinen Verknüpfungen. War der Cache schon woandershin umgeleitet, wird nur die Verbindung ersetzt, das alte Ziel bleibt unangetastet.
+  - **Standard wiederherstellen** entfernt die Umleitung; das Programm legt seinen Cache wieder an der normalen Stelle an.
+
+**English**
+
+- **New: Tools → Relocate caches …** moves the cache of browsers and programs to a RAM drive. This spares the SSD and can be faster.
+  - Supported: Chrome (also Beta/Canary), Chromium, Edge (all channels), Brave, Vivaldi, Yandex, Cent Browser, Comodo Dragon, Ulaa, Opera, Opera GX, Firefox, LibreWolf, Waterfox, Pale Moon, Thunderbird, VS Code (also Insiders), Discord, Slack, Teams classic, Telegram, Steam and DuckDuckGo.
+  - Chromium browsers list every profile separately.
+  - The list shows size and file count of each cache, and whether it is already redirected (also by other programs) or its target is missing.
+  - Every program and profile gets its own folder, e.g. `R:\Cache\Chrome-Default`. RamDiskBox adds it to the drive's folder list, so it is recreated at every mount.
+  - The redirection is a directory junction and needs no administrator rights.
+  - If the affected programs are still running, RamDiskBox refuses to move and names them.
+  - When deleting the old cache, RamDiskBox follows no links. If the cache was already redirected elsewhere, only the link is replaced and the old target is left alone.
+  - **Restore default** removes the redirection; the program creates its cache in the normal place again.
+
 ## 1.6.4 (Build 13)
 
 - **Speicherleiste zählt die Größe der RAM-Laufwerke:**

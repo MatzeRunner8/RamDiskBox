@@ -200,6 +200,49 @@ const Entry kText[S_COUNT] = {
                              L"Reserved = size of the mounted RAM drives not yet taken from memory" },
     /* S_MEM_TIP_OFFLINE */ { L"Hintergrundprozess nicht verbunden: eigene Laufwerke fehlen.",
                               L"Background process not connected: own drives are missing." },
+    /* S_M_CACHE */ { L"&Cache verlagern...", L"Relocate &caches..." },
+    /* S_CD_TITLE */ { L"Cache verlagern", L"Relocate caches" },
+    /* S_CD_INFO */ { L"Verlagert den Cache von Browsern und Programmen auf ein RAM-Laufwerk. Das schont die SSD und kann "
+                      L"schneller sein. Der bisherige Cache wird dabei gelöscht; jedes Programm bekommt einen eigenen Ordner, "
+                      L"den RamDiskBox bei jedem Einhängen neu anlegt. Mehrfachauswahl ist möglich.",
+                      L"Moves the cache of browsers and programs to a RAM drive. This spares the SSD and can be faster. The "
+                      L"existing cache is deleted; every program gets its own folder, which RamDiskBox recreates at every "
+                      L"mount. Multiple selection is possible." },
+    /* S_CD_TARGET */ { L"Ziel:", L"Target:" },
+    /* S_CD_MOVE */ { L"Verschieben", L"Move" },
+    /* S_CD_RESTORE */ { L"Standard wiederherstellen", L"Restore default" },
+    /* S_CD_REFRESH */ { L"Aktualisieren", L"Refresh" },
+    /* S_CD_CLOSE */ { L"Schließen", L"Close" },
+    /* S_CD_COL_APP */ { L"Programm", L"Program" },
+    /* S_CD_COL_STATE */ { L"Zustand", L"State" },
+    /* S_CD_COL_PATH */ { L"Cache-Ordner", L"Cache folder" },
+    /* S_CD_NOCACHE */ { L"noch kein Cache", L"no cache yet" },
+    /* S_CD_LINKED */ { L"umgeleitet nach %s", L"redirected to %s" },
+    /* S_CD_DANGLING */ { L"umgeleitet nach %s – Ziel fehlt!", L"redirected to %s – target missing!" },
+    /* S_CD_COUNTING */ { L"wird gezählt …", L"counting …" },
+    /* S_CD_SIZE */ { L"%s · %s Datei(en)", L"%s · %s file(s)" },
+    /* S_CD_NONE_FOUND */ { L"Keine unterstützten Browser oder Programme gefunden.", L"No supported browsers or programs found." },
+    /* S_CD_HINT */ { L"Zielordner: %s (wird bei jedem Einhängen angelegt)", L"Target folder: %s (created at every mount)" },
+    /* S_CD_NO_DRIVE */ { L"Kein RAM-Laufwerk eingehängt.", L"No RAM drive is mounted." },
+    /* S_CD_SELECT */ { L"Bitte zuerst einen oder mehrere Einträge auswählen.", L"Please select one or more entries first." },
+    /* S_CD_SELECT_LINKED */ { L"Bitte umgeleitete Einträge auswählen.", L"Please select redirected entries." },
+    /* S_CD_BADFOLDER */ { L"Ungültiger Ordnername: %s", L"Invalid folder name: %s" },
+    /* S_CD_RUNNING */ { L"Bitte zuerst diese Programme schließen (auch Hintergrundprozesse, z. B. den Schnellstart von Edge):%s",
+                         L"Please close these programs first (including background processes, e.g. Edge startup boost):%s" },
+    /* S_CD_CONFIRM_MOVE */ { L"Der bisherige Cache von %d Eintrag/Einträgen wird gelöscht und durch eine Verbindung in einen "
+                              L"eigenen Ordner unter %s ersetzt. Fortfahren?",
+                              L"The existing cache of %d entry/entries is deleted and replaced by a link to its own folder "
+                              L"under %s. Continue?" },
+    /* S_CD_CONFIRM_RESTORE */ { L"Die Umleitung von %d Eintrag/Einträgen wird entfernt; die Programme legen ihren Cache wieder "
+                                 L"an der normalen Stelle an. Fortfahren?",
+                                 L"The redirection of %d entry/entries is removed; the programs create their cache in the "
+                                 L"normal place again. Continue?" },
+    /* S_CD_INUSE */ { L"Cache konnte nicht vollständig gelöscht werden (Programm noch offen?): %s",
+                       L"The cache could not be deleted completely (program still open?): %s" },
+    /* S_CD_FOLDERS_FAIL */ { L"%s: Zielordner nicht in die Ordnerliste eingetragen (%s)", L"%s: target folder not added to the folder list (%s)" },
+    /* S_CD_FAILED_ITEM */ { L"%s: %s", L"%s: %s" },
+    /* S_CD_DONE */ { L"%d von %d verlagert.", L"%d of %d relocated." },
+    /* S_CD_RESTORED */ { L"%d von %d wiederhergestellt.", L"%d of %d restored." },
 };
 
 static_assert(sizeof(kText) / sizeof(kText[0]) == S_COUNT, "Texttabelle passt nicht zu enum Str");

@@ -32,6 +32,7 @@ Voraussetzung ist [WinFsp](https://winfsp.dev). English: [README.md](README.md)
   - braucht den Dienstmodus
   - gilt nur, solange das Laufwerk eingehängt ist, und wird beim Aushängen (bzw. nach einem Absturz beim nächsten Start) wieder entfernt
 - **TEMP/TMP umleiten** auf ein RAM-Laufwerk, mit Rücksetzen auf den vorherigen Wert
+- **Cache verlagern:** Browser-Caches (Chrome, Edge, Firefox, Brave, Opera, Vivaldi u. a.) und Programme wie VS Code, Discord oder Steam per Verzeichnisverbindung aufs RAM-Laufwerk legen; jedes Programm und Profil bekommt einen eigenen Ordner, der bei jedem Einhängen neu angelegt wird
 - **Zwei Betriebsarten:**
   - **Portabel:** ohne Installation; die Laufwerke gibt es, solange du angemeldet bist
   - **Windows-Dienst:** Laufwerke stehen schon vor der Anmeldung bereit und gelten für alle Benutzer
@@ -89,6 +90,7 @@ in den du ohne Adminrechte schreiben kannst, von anderen Programmen ausgetauscht
 1. RamDiskBox installieren (oder portabel entpacken) und starten
 2. **Neu …** wählen, Buchstabe, Größe und Bezeichnung einstellen, OK
 3. Optional unter **Extras → TEMP/TMP umleiten …** den Temp-Ordner auf das Laufwerk legen
+4. Optional unter **Extras → Cache verlagern …** Browser-Caches auf das Laufwerk legen (Browser vorher schließen)
 
 Ohne Image ist der Inhalt eines RAM-Laufwerks beim Aushängen, Abmelden oder Herunterfahren weg. Was erhalten
 bleiben soll, braucht „Inhalt in einer Image-Datei sichern“.

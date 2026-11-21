@@ -21,6 +21,7 @@ Requires [WinFsp](https://winfsp.dev). Deutsch: [README.de.md](README.de.md)
 - Image backup: load on mount, save on unmount and at shutdown, plus every *n* minutes; XPRESS-compressed with checksums, replaced atomically; a damaged image is set aside instead of overwritten
 - Folders created automatically (e.g. `Temp`)
 - Redirect TEMP/TMP to a RAM drive and restore it later
+- Relocate caches: move browser caches (Chrome, Edge, Firefox, Brave, Opera, Vivaldi and more) and programs such as VS Code, Discord or Steam to a RAM drive via directory junctions; every program and profile gets its own folder, recreated at every mount
 - Portable mode (no installation) or Windows service (drives available before sign-in, for all users)
 - NTFS-compatible: ACLs, alternate data streams, junctions and symbolic links, case preserving; optionally reports "NTFS" to programs that require it
 - Statistics: usage, RAM, current throughput, lifetime counters and peaks
