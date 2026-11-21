@@ -2,6 +2,7 @@
 #include "widgets.h"
 #include "theme.h"
 #include <commctrl.h>
+#include <uxtheme.h>
 #include <map>
 #include <tuple>
 #include <vector>
@@ -79,10 +80,39 @@ LRESULT CALLBACK ToolButtonProc(HWND h, UINT msg, WPARAM wp, LPARAM lp, UINT_PTR
 // ----------------------------------------------------------------------- Speicherleiste
 
 struct MemBarData {
-    unsigned long long vals[3] = {};
-    std::wstring texts[3];
+    std::vector<MemSegment> segs;
+    std::wstring tip;
     HFONT font = nullptr;
+    HWND tipWnd = nullptr;
+    int tipDark = -1;
 };
+
+int TextWidth(HDC dc, const std::wstring& s)
+{
+    if (s.empty()) return 0;
+    SIZE sz{};
+    GetTextExtentPoint32W(dc, s.c_str(), (int)s.size(), &sz);
+    return sz.cx;
+}
+
+// Abgerundeter Abschnitt mit diagonaler Schraffur (Linienbreite und Abstand skalieren mit der DPI)
+void HatchFill(HWND h, HDC dc, const RECT& r, int radius, COLORREF base, COLORREF lines)
+{
+    RoundFill(dc, r, radius, base);
+    HRGN rgn = CreateRoundRectRgn(r.left, r.top, r.right + 1, r.bottom + 1, radius, radius);
+    SelectClipRgn(dc, rgn);
+    HPEN pen = CreatePen(PS_SOLID, std::max(1, Scale(h, 2)), lines);
+    HGDIOBJ op = SelectObject(dc, pen);
+    int step = std::max(4, Scale(h, 8)), height = r.bottom - r.top;
+    for (int x = r.left - height; x < r.right; x += step) {
+        MoveToEx(dc, x, r.bottom, nullptr);
+        LineTo(dc, x + height, r.top);
+    }
+    SelectObject(dc, op);
+    DeleteObject(pen);
+    SelectClipRgn(dc, nullptr);
+    DeleteObject(rgn);
+}
 
 void PaintMemBar(HWND h, HDC wdc)
 {
@@ -96,46 +126,72 @@ void PaintMemBar(HWND h, HDC wdc)
     HBRUSH bg = CreateSolidBrush(dark ? Colors().bg : GetSysColor(COLOR_BTNFACE));
     FillRect(dc, &rc, bg);
     DeleteObject(bg);
-    if (d) {
+    std::vector<const MemSegment*> vis;
+    unsigned long long sum = 0;
+    if (d) for (auto& s : d->segs) if (s.value) { vis.push_back(&s); sum += s.value; }
+    const int n = (int)vis.size();
+    if (n > 0 && rc.right > 0) {
         HGDIOBJ of = SelectObject(dc, d->font ? d->font : GetStockObject(DEFAULT_GUI_FONT));
-        const COLORREF fills[3] = {
-            dark ? RGB(47, 94, 160) : RGB(52, 112, 196),   // RAM-Laufwerke
-            dark ? RGB(36, 120, 66) : RGB(46, 145, 82),    // frei
-            dark ? RGB(78, 78, 78) : RGB(128, 128, 128),   // andere Programme
-        };
-        int gap = Scale(h, 6), pad = Scale(h, 12), radius = Scale(h, 8);
-        int avail = std::max(0, (int)rc.right - 2 * gap);
-        int minw[3], w[3];
-        unsigned long long sum = d->vals[0] + d->vals[1] + d->vals[2];
-        for (int i = 0; i < 3; i++) {
-            SIZE sz{};
-            GetTextExtentPoint32W(dc, d->texts[i].c_str(), (int)d->texts[i].size(), &sz);
-            minw[i] = sz.cx + 2 * pad;
-            w[i] = sum ? (int)((double)avail * d->vals[i] / sum) : avail / 3;
-            w[i] = std::max(w[i], minw[i]);
+        const int gap = Scale(h, 6), pad = Scale(h, 12), inner = Scale(h, 4), radius = Scale(h, 8), sliver = Scale(h, 4);
+        const int avail = std::max(0, (int)rc.right - gap * (n - 1));
+        std::vector<int> share(n), lw(n), sw(n), minw(n), w(n);
+        std::vector<bool> tiny(n);
+        for (int i = 0; i < n; i++) {
+            share[i] = (int)((double)avail * vis[i]->value / sum);
+            lw[i] = TextWidth(dc, vis[i]->longText) + 2 * pad;
+            sw[i] = TextWidth(dc, vis[i]->shortText) + 2 * pad;
+            // Sehr kleine Anteile (unter 3 %) bekommen keine Beschriftung, die sie breiter machen wuerde
+            tiny[i] = (double)vis[i]->value / sum < 0.03 && share[i] < sw[i];
         }
-        // Mindestbreiten fuer die Beschriftung: Ueberhang vom Teil mit dem meisten Spielraum nehmen
-        int total = w[0] + w[1] + w[2];
+        // Eine Stufe fuer alle: lange Texte, kurze Texte oder ohne Text, je nachdem, was hineinpasst
+        int level = 2;
+        for (int lv = 0; lv < 2 && level == 2; lv++) {
+            long long need = 0;
+            for (int i = 0; i < n; i++) need += tiny[i] ? sliver : (lv == 0 ? lw[i] : sw[i]);
+            if (need <= avail) level = lv;
+        }
+        long long total = 0;
+        for (int i = 0; i < n; i++) {
+            minw[i] = (tiny[i] || level == 2) ? sliver : (level == 0 ? lw[i] : sw[i]);
+            w[i] = std::max(share[i], minw[i]);
+            total += w[i];
+        }
+        // Ueberhang vom Abschnitt mit dem meisten Spielraum nehmen, nie unter seine Mindestbreite
         while (total > avail) {
-            int best = 0;
-            for (int i = 1; i < 3; i++) if (w[i] - minw[i] > w[best] - minw[best]) best = i;
-            int slack = w[best] - minw[best];
-            if (slack <= 0) { w[best] -= total - avail; break; }   // zu schmal: Text wird gekuerzt
-            int take = std::min(slack, total - avail);
+            int best = -1;
+            for (int i = 0; i < n; i++)
+                if (w[i] > minw[i] && (best < 0 || w[i] - minw[i] > w[best] - minw[best])) best = i;
+            if (best < 0) break;   // zu schmal: Abschnitte werden rechts abgeschnitten
+            int take = (int)std::min<long long>(w[best] - minw[best], total - avail);
             w[best] -= take;
             total -= take;
         }
-        w[2] += avail - (w[0] + w[1] + w[2]);   // Rundungsrest
-        int x = 0;
+        if (total < avail) {   // Rundungsrest an den breitesten Abschnitt
+            int big = 0;
+            for (int i = 1; i < n; i++) if (w[i] > w[big]) big = i;
+            w[big] += (int)(avail - total);
+        }
         SetBkMode(dc, TRANSPARENT);
-        SetTextColor(dc, RGB(255, 255, 255));
-        for (int i = 0; i < 3; i++) {
-            RECT r{ x, 0, x + std::max(0, w[i]), rc.bottom };
+        int x = 0;
+        for (int i = 0; i < n; i++) {
+            const MemSegment& s = *vis[i];
+            RECT r{ x, 0, std::min<LONG>(rc.right, x + w[i]), rc.bottom };
             if (r.right > r.left) {
-                RoundFill(dc, r, radius, fills[i]);
-                RECT tr = r;
-                InflateRect(&tr, -Scale(h, 4), 0);
-                DrawTextW(dc, d->texts[i].c_str(), -1, &tr, DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS | DT_NOPREFIX);
+                if (s.hatched) HatchFill(h, dc, r, radius, s.fill, s.hatch);
+                else RoundFill(dc, r, radius, s.fill);
+                // laengste Beschriftung, die in den Abschnitt passt
+                int room = (int)(r.right - r.left) - 2 * inner;
+                const std::wstring* t = nullptr;
+                if (!tiny[i]) {
+                    if (!s.longText.empty() && TextWidth(dc, s.longText) <= room) t = &s.longText;
+                    else if (!s.shortText.empty() && TextWidth(dc, s.shortText) <= room) t = &s.shortText;
+                }
+                if (t) {
+                    RECT tr = r;
+                    InflateRect(&tr, -inner, 0);
+                    SetTextColor(dc, s.text);
+                    DrawTextW(dc, t->c_str(), -1, &tr, DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
+                }
             }
             x = r.right + gap;
         }
@@ -155,6 +211,7 @@ LRESULT CALLBACK MemBarProc(HWND h, UINT msg, WPARAM wp, LPARAM lp)
         SetWindowLongPtrW(h, GWLP_USERDATA, (LONG_PTR)new MemBarData);
         break;
     case WM_NCDESTROY:
+        if (d && d->tipWnd) DestroyWindow(d->tipWnd);
         delete d;
         SetWindowLongPtrW(h, GWLP_USERDATA, 0);
         break;
@@ -162,6 +219,12 @@ LRESULT CALLBACK MemBarProc(HWND h, UINT msg, WPARAM wp, LPARAM lp)
         if (d) d->font = (HFONT)wp;
         if (LOWORD(lp)) InvalidateRect(h, nullptr, FALSE);
         return 0;
+    case WM_SIZE:   // Abschnitte und Beschriftungen haengen von der Breite ab
+        InvalidateRect(h, nullptr, FALSE);
+        break;
+    case WM_DPICHANGED_AFTERPARENT:
+        if (d && d->tipWnd) SendMessageW(d->tipWnd, TTM_SETMAXTIPWIDTH, 0, Scale(h, 640));
+        break;
     case WM_ERASEBKGND:
         return 1;
     case WM_PAINT: {
@@ -281,6 +344,7 @@ HWND MemBarCreate(HINSTANCE inst, HWND parent, int id)
     static bool registered = false;
     if (!registered) {
         WNDCLASSW wc{};
+        wc.style = CS_HREDRAW | CS_VREDRAW;
         wc.lpfnWndProc = MemBarProc;
         wc.hInstance = inst;
         wc.hCursor = LoadCursorW(nullptr, IDC_ARROW);
@@ -291,21 +355,46 @@ HWND MemBarCreate(HINSTANCE inst, HWND parent, int id)
     return CreateWindowExW(0, kMemBarClass, L"", WS_CHILD | WS_VISIBLE, 0, 0, 10, 10, parent, (HMENU)(INT_PTR)id, inst, nullptr);
 }
 
-void MemBarSet(HWND bar, unsigned long long disks, unsigned long long freeMem, unsigned long long total,
-               const std::wstring& disksText, const std::wstring& freeText, const std::wstring& otherText)
+void MemBarSet(HWND bar, const std::vector<MemSegment>& segments, const std::wstring& tooltip)
 {
     MemBarData* d = (MemBarData*)GetWindowLongPtrW(bar, GWLP_USERDATA);
     if (!d) return;
-    unsigned long long other = total > freeMem + disks ? total - freeMem - disks : 0;
-    unsigned long long v[3] = { disks, freeMem, other };
-    std::wstring t[3] = { disksText, freeText, otherText };
-    bool changed = false;
-    for (int i = 0; i < 3; i++) {
-        if (d->vals[i] != v[i] || d->texts[i] != t[i]) changed = true;
-        d->vals[i] = v[i];
-        d->texts[i] = t[i];
+    bool changed = segments.size() != d->segs.size();
+    for (size_t i = 0; !changed && i < segments.size(); i++) {
+        const MemSegment &a = segments[i], &b = d->segs[i];
+        changed = a.value != b.value || a.fill != b.fill || a.text != b.text || a.hatched != b.hatched ||
+                  a.hatch != b.hatch || a.longText != b.longText || a.shortText != b.shortText;
     }
-    if (changed) InvalidateRect(bar, nullptr, FALSE);
+    if (changed) {
+        d->segs = segments;
+        InvalidateRect(bar, nullptr, FALSE);
+    }
+    // Kurzinfo mit den genauen Werten (eigenes Fenster, mehrzeilig, passend zu Hell/Dunkel)
+    if (!d->tipWnd) {
+        d->tipWnd = CreateWindowExW(WS_EX_TOPMOST, TOOLTIPS_CLASSW, nullptr, WS_POPUP | TTS_ALWAYSTIP | TTS_NOPREFIX,
+            CW_USEDEFAULT, CW_USEDEFAULT, CW_USEDEFAULT, CW_USEDEFAULT, bar, nullptr, nullptr, nullptr);
+        TTTOOLINFOW ti{ sizeof ti };
+        ti.uFlags = TTF_IDISHWND | TTF_SUBCLASS;
+        ti.hwnd = bar;
+        ti.uId = (UINT_PTR)bar;
+        ti.lpszText = (LPWSTR)L"";
+        SendMessageW(d->tipWnd, TTM_ADDTOOLW, 0, (LPARAM)&ti);
+        SendMessageW(d->tipWnd, TTM_SETMAXTIPWIDTH, 0, Scale(bar, 640));
+        SendMessageW(d->tipWnd, TTM_SETDELAYTIME, TTDT_AUTOPOP, 30000);
+    }
+    int dark = IsDark() ? 1 : 0;
+    if (dark != d->tipDark) {
+        SetWindowTheme(d->tipWnd, dark ? L"DarkMode_Explorer" : nullptr, nullptr);
+        d->tipDark = dark;
+    }
+    if (tooltip != d->tip) {
+        d->tip = tooltip;
+        TTTOOLINFOW ti{ sizeof ti };
+        ti.hwnd = bar;
+        ti.uId = (UINT_PTR)bar;
+        ti.lpszText = (LPWSTR)d->tip.c_str();
+        SendMessageW(d->tipWnd, TTM_UPDATETIPTEXTW, 0, (LPARAM)&ti);
+    }
 }
 
 } // namespace gui

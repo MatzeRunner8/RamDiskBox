@@ -1,5 +1,51 @@
 # Änderungen / Changelog
 
+## 1.6.4 (Build 13)
+
+- **Speicherleiste zählt die Größe der RAM-Laufwerke:**
+  - Neuer, schraffierter Abschnitt „Reserviert“: der Teil der eingehängten RAM-Laufwerke, der noch nicht im Arbeitsspeicher belegt ist.
+  - „Frei“ ist jetzt der verfügbare Speicher abzüglich dieser Reserve.
+  - Laufwerke von SoftPerfect RAM Disk werden erkannt und mitgezählt.
+  - Ist mehr reserviert als frei, wird der Abschnitt rot („zu viel“); wird es knapp, wird „Frei“ gelb.
+  - Die Kurzinfo nennt alle Werte und jedes Laufwerk einzeln.
+- **Spalten passen sich an:**
+  - Laufwerk, Größe und Komprimierung richten sich nach dem Inhalt.
+  - Bezeichnung, Belegung und Image teilen sich den restlichen Platz.
+  - Rechts bleibt keine leere Fläche, und es gibt keinen Rollbalken mehr.
+  - Bezeichnung und Belegung lassen sich weiter von Hand ziehen; ein Doppelklick auf den Trenner macht sie wieder automatisch.
+  - Lange Image-Pfade werden in der Mitte gekürzt, der Dateiname bleibt sichtbar.
+- **Fenstergröße:**
+  - Die Mindestgröße richtet sich nach dem Inhalt (kleiner als bisher).
+  - Die Statuszeile lässt bei Platzmangel zuerst die Betriebsart weg.
+  - Gekürzter Text erscheint als Kurzinfo.
+  - Weniger Flackern beim Ziehen.
+  - Spalten und Schrift passen sich beim Wechsel auf einen Monitor mit anderer Skalierung an.
+- **Behoben:** Beim Hochfahren startet der RamDiskBox-Dienst oft vor dem Windows Defender. Die Defender-Ausnahme schlug dann fehl (z. B. Fehler 0x80041001), und das Laufwerk zeigte ein Warnsymbol. RamDiskBox versucht es jetzt im Hintergrund erneut (nach 15 s, 30 s, 60 s, ... höchstens alle 5 Minuten), bis es klappt; das Warnsymbol verschwindet dann von selbst.
+- **Behoben:** Hatte man das Laufwerk selbst in den Defender-Ausnahmen eingetragen, entfernte RamDiskBox diese Ausnahme beim Aushängen. Eine bereits vorhandene Ausnahme wird jetzt nur übernommen und bleibt erhalten. Eine eigene, übrig gebliebene Ausnahme räumt RamDiskBox später zuverlässig auf.
+
+**English**
+
+- **Memory bar counts the size of RAM drives:**
+  - New hatched "Reserved" segment: the part of the mounted RAM drives not yet taken from memory.
+  - "Free" is now the available memory minus this reserve.
+  - SoftPerfect RAM Disk drives are detected and included.
+  - If more is reserved than free, the segment turns red ("too much"); when memory gets low, "Free" turns amber.
+  - The tooltip lists all values and every drive.
+- **Columns adapt:**
+  - Drive, size and compression follow their content.
+  - Label, usage and image share the remaining space.
+  - No empty area on the right and no scroll bar any more.
+  - Label and usage can still be dragged; double-clicking the divider makes them automatic again.
+  - Long image paths are shortened in the middle so the file name stays visible.
+- **Window size:**
+  - The minimum size follows the content (smaller than before).
+  - The status bar drops the mode first when space is short.
+  - Shortened text appears as a tooltip.
+  - Less flicker while resizing.
+  - Columns and font adapt when moving to a monitor with different scaling.
+- **Fixed:** at system startup the RamDiskBox service often starts before Windows Defender. The Defender exclusion then failed (e.g. error 0x80041001), and the drive showed a warning icon. RamDiskBox now retries in the background (after 15 s, 30 s, 60 s, ... at most every 5 minutes) until it succeeds; the warning icon then disappears by itself.
+- **Fixed:** if you had added the drive to the Defender exclusions yourself, RamDiskBox removed that exclusion on dismount. An existing exclusion is now only adopted and kept. RamDiskBox reliably cleans up a leftover exclusion of its own later.
+
 ## 1.6.2 (Build 11)
 
 - **Frisch geschriebene Dateien bleiben im Cache:** Damit Programme nach dem Ändern einer Datei die richtige Änderungszeit sehen (seit 1.4.1), hat RamDiskBox Windows bisher über die Änderung benachrichtigt. WinFsp verwirft dabei aber immer auch den Cache der Datei, das erste Lesen danach war deutlich langsamer. Bei Dateien ab 1 MB frischt RamDiskBox die Angaben jetzt auf einem anderen Weg auf, und der Cache bleibt erhalten. Gemessen im Dienstmodus: erstes Lesen einer gerade geschriebenen 2-GB-Datei 5–6 statt 2,5 GB/s. Änderungszeit, Größe und Attribute stimmen weiterhin sofort.

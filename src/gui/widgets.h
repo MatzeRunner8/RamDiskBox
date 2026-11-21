@@ -2,6 +2,7 @@
 // Bausteine der Oberflaeche: Symbole aus der Windows-Symbolschrift, Symbolknoepfe, Speicherleiste
 #include <windows.h>
 #include <string>
+#include <vector>
 
 namespace gui {
 
@@ -34,9 +35,17 @@ void DrawGlyph(HDC dc, wchar_t glyph, const RECT& box, int px, COLORREF color, B
 void ToolButtonAttach(HWND button);
 void ToolButtonDraw(const DRAWITEMSTRUCT* di, wchar_t glyph, COLORREF color);
 
-// Speicherleiste: belegter Speicher der RAM-Laufwerke | frei | andere Programme
+// Speicherleiste: Abschnitte proportional zu ihrem Wert (Abschnitte mit Wert 0 entfallen). Jeder
+// Abschnitt hat eine lange und eine kurze Beschriftung; passt keine, bleibt er ohne Text, die genauen
+// Werte stehen in der Kurzinfo (tooltip, mehrzeilig).
+struct MemSegment {
+    unsigned long long value = 0;
+    COLORREF fill = 0, text = RGB(255, 255, 255);
+    bool hatched = false;      // schraffiert (z. B. reservierte, noch nicht belegte Kapazitaet)
+    COLORREF hatch = 0;        // Farbe der Schraffurlinien
+    std::wstring longText, shortText;
+};
 HWND MemBarCreate(HINSTANCE inst, HWND parent, int id);
-void MemBarSet(HWND bar, unsigned long long disks, unsigned long long freeMem, unsigned long long total,
-               const std::wstring& disksText, const std::wstring& freeText, const std::wstring& otherText);
+void MemBarSet(HWND bar, const std::vector<MemSegment>& segments, const std::wstring& tooltip);
 
 } // namespace gui

@@ -3,8 +3,8 @@
 // Einzige Stelle fuer die Versionsnummer (wird auch von den .rc-Dateien gelesen).
 #define RDB_VER_MAJOR 1
 #define RDB_VER_MINOR 6
-#define RDB_VER_PATCH 2
-#define RDB_BUILD     11
+#define RDB_VER_PATCH 4
+#define RDB_BUILD     13
 
 #define RDB_STR2(x) #x
 #define RDB_STR(x) RDB_STR2(x)

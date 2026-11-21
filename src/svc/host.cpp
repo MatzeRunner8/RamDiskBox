@@ -114,13 +114,18 @@ bool Host::Start(bool serviceMode, std::wstring& err)
         wchar_t key[2] = { l, 0 };
         if (ini_->Get(L"Exclusions", key, L"").empty()) continue;
         std::wstring e;
-        if (DefenderExclusion(false, std::wstring(1, l) + L":\\", e))
+        if (DefenderExclusion(false, std::wstring(1, l) + L":\\", e)) {
             Log(L"Laufwerk %c: alte Defender-Ausnahme entfernt.", L"Drive %c: old Defender exclusion removed.", l);
-        else
+            ini_->DeleteKey(L"Exclusions", key);
+        } else {
+            // Eintrag behalten (z. B. Defender beim Hochfahren noch nicht bereit): Die Ausnahme gilt
+            // weiter als eigene; der Zeitgeber versucht das Entfernen erneut (RetryStaleExclusions).
             Log(L"Laufwerk %c: alte Defender-Ausnahme konnte nicht entfernt werden: %s",
                 L"Drive %c: could not remove old Defender exclusion: %s", l, e.c_str());
-        ini_->DeleteKey(L"Exclusions", key);
+            staleExcl_.push_back(l);
+        }
     }
+    staleRetryTick_ = GetTickCount64() + 30000;
 
     std::vector<std::shared_ptr<Volume>> autos;
     {
@@ -449,31 +454,136 @@ void Host::SetExclusion(Volume& v, bool on)
     std::wstring e;
     if (on) {
         if (v.avActive) return;
-        if (DefenderExclusion(true, path, e)) {
+        auto succeeded = [&](bool owned) {
             v.avActive = true;
+            v.avOwned = owned;
+            v.avRetryTick = 0;
+            v.avRetries = 0;
+            std::lock_guard<std::mutex> g(v.state);
+            if (!v.avError.empty() && v.lastError == v.avError) v.lastError.clear();
+            v.avError.clear();
+        };
+        bool recorded;   // von einem frueheren Lauf selbst eingetragen und nicht entfernt (Absturz)
+        {
             std::lock_guard<std::mutex> g(mu_);
-            ini_->Set(L"Exclusions", key, L"1");
-            Log(L"Laufwerk %c: vom Defender-Echtzeitschutz ausgenommen.", L"Drive %c: excluded from Defender real-time protection.", v.cfg.letter);
+            recorded = !ini_->Get(L"Exclusions", key, L"").empty();
+        }
+        auto failed = [&](bool permanent) {
+            // Beim Hochfahren startet der Dienst oft vor Defender: spaeter erneut versuchen (15 s, 30 s,
+            // 60 s, ... hoechstens alle 5 Minuten), solange das Laufwerk eingehaengt ist. Ohne Rechte bzw.
+            // ohne Defender hilft ein neuer Versuch nicht.
+            if (permanent) {
+                v.avRetryTick = 0;
+            } else {
+                unsigned long long delay = std::min(15000ull << std::min(v.avRetries, 5u), 300000ull);
+                v.avRetryTick = GetTickCount64() + delay;
+            }
+            if (v.avRetries == 0) {
+                if (permanent)
+                    Log(L"Laufwerk %c: Defender-Ausnahme nicht möglich: %s", L"Drive %c: Defender exclusion not possible: %s",
+                        v.cfg.letter, e.c_str());
+                else
+                    Log(L"Laufwerk %c: Defender-Ausnahme nicht möglich: %s (neuer Versuch folgt)",
+                        L"Drive %c: Defender exclusion not possible: %s (will retry)", v.cfg.letter, e.c_str());
+            }
+            v.avRetries++;
+            std::wstring msg = Tr(L"Defender-Ausnahme nicht möglich: ", L"Defender exclusion not possible: ") + e;
+            std::lock_guard<std::mutex> g(v.state);
+            // andere Warnungen (z. B. beschaedigtes Image) nicht ueberschreiben
+            if (v.lastError.empty() || v.lastError == v.avError) v.lastError = msg;
+            v.avError = msg;
+        };
+        // Steht das Laufwerk schon in den Defender-Ausnahmen (vom Benutzer selbst eingetragen), nur
+        // uebernehmen: Beim Aushaengen bleibt diese Ausnahme dann erhalten. Laesst sich das nicht
+        // pruefen, nichts eintragen (sonst gilt eine Ausnahme des Benutzers spaeter als eigene).
+        bool has = false, hidden = false, permanent = false;
+        if (!DefenderHasExclusion(path, has, hidden, e, &permanent)) { failed(permanent); return; }
+        if (has) {
+            succeeded(recorded);
+            if (recorded)
+                Log(L"Laufwerk %c: vom Defender-Echtzeitschutz ausgenommen.", L"Drive %c: excluded from Defender real-time protection.", v.cfg.letter);
+            else
+                Log(L"Laufwerk %c: war bereits vom Defender-Echtzeitschutz ausgenommen (Ausnahme bleibt beim Aushängen erhalten).",
+                    L"Drive %c: was already excluded from Defender real-time protection (the exclusion is kept on dismount).", v.cfg.letter);
+            return;
+        }
+        if (DefenderExclusion(true, path, e, &permanent)) {
+            succeeded(true);
+            {
+                std::lock_guard<std::mutex> g(mu_);
+                ini_->Set(L"Exclusions", key, L"1");
+            }
+            if (hidden)   // Ausnahmen verborgen: ob sie schon bestand, ist unbekannt; wie bisher als eigene behandeln
+                Log(L"Laufwerk %c: vom Defender-Echtzeitschutz ausgenommen (vorhandene Ausnahmen nicht lesbar).",
+                    L"Drive %c: excluded from Defender real-time protection (existing exclusions not readable).", v.cfg.letter);
+            else
+                Log(L"Laufwerk %c: vom Defender-Echtzeitschutz ausgenommen.", L"Drive %c: excluded from Defender real-time protection.", v.cfg.letter);
         } else {
-            v.SetError(Tr(L"Defender-Ausnahme nicht möglich: ", L"Defender exclusion not possible: ") + e);
-            Log(L"Laufwerk %c: Defender-Ausnahme nicht möglich: %s", L"Drive %c: Defender exclusion not possible: %s", v.cfg.letter, e.c_str());
+            failed(permanent);
         }
         return;
+    }
+    v.avRetryTick = 0;
+    v.avRetries = 0;
+    {
+        std::lock_guard<std::mutex> g(v.state);
+        if (!v.avError.empty() && v.lastError == v.avError) v.lastError.clear();
+        v.avError.clear();
     }
     bool recorded;
     {
         std::lock_guard<std::mutex> g(mu_);
         recorded = !ini_->Get(L"Exclusions", key, L"").empty();
     }
-    if (!v.avActive && !recorded) return;
-    if (DefenderExclusion(false, path, e))
+    if (!(v.avActive && v.avOwned) && !recorded) { v.avActive = false; return; }
+    v.avActive = false;
+    v.avOwned = false;
+    if (DefenderExclusion(false, path, e)) {
         Log(L"Laufwerk %c: Defender-Ausnahme entfernt.", L"Drive %c: Defender exclusion removed.", v.cfg.letter);
-    else
+        std::lock_guard<std::mutex> g(mu_);
+        ini_->DeleteKey(L"Exclusions", key);
+        staleExcl_.erase(std::remove(staleExcl_.begin(), staleExcl_.end(), v.cfg.letter), staleExcl_.end());
+    } else {
+        // Eintrag behalten: Die Ausnahme gilt weiter als eigene; der Zeitgeber versucht es erneut
         Log(L"Laufwerk %c: Defender-Ausnahme konnte nicht entfernt werden: %s", L"Drive %c: could not remove Defender exclusion: %s",
             v.cfg.letter, e.c_str());
-    v.avActive = false;
-    std::lock_guard<std::mutex> g(mu_);
-    ini_->DeleteKey(L"Exclusions", key);
+        std::lock_guard<std::mutex> g(mu_);
+        if (std::find(staleExcl_.begin(), staleExcl_.end(), v.cfg.letter) == staleExcl_.end()) staleExcl_.push_back(v.cfg.letter);
+    }
+}
+
+// Eigene Defender-Ausnahmen, deren Entfernen fehlschlug (beim Start oder Aushaengen), spaeter erneut
+// entfernen, solange auf dem Buchstaben kein eingehaengtes Laufwerk mit Ausnahme liegt.
+void Host::RetryStaleExclusions()
+{
+    std::vector<wchar_t> letters;
+    {
+        std::lock_guard<std::mutex> g(mu_);
+        unsigned long long now = GetTickCount64();
+        if (staleExcl_.empty() || now < staleRetryTick_) return;
+        staleRetryTick_ = now + 300000;   // alle 5 Minuten
+        letters = staleExcl_;
+    }
+    for (wchar_t l : letters) {
+        auto v = Get(l);
+        std::unique_lock<std::mutex> op;   // waehrend des Entfernens kein Einhaengen auf diesem Buchstaben
+        if (v) {
+            op = std::unique_lock<std::mutex>(v->op, std::try_to_lock);
+            if (!op.owns_lock()) continue;
+            if (v->fs && v->cfg.avExclude) continue;   // gehoert wieder einem eingehaengten Laufwerk
+        }
+        std::wstring e;
+        bool permanent = false;
+        if (DefenderExclusion(false, std::wstring(1, l) + L":\\", e, &permanent) || permanent) {
+            if (!permanent) Log(L"Laufwerk %c: alte Defender-Ausnahme entfernt.", L"Drive %c: old Defender exclusion removed.", l);
+            std::lock_guard<std::mutex> g(mu_);
+            staleExcl_.erase(std::remove(staleExcl_.begin(), staleExcl_.end(), l), staleExcl_.end());
+            if (!permanent) {
+                wchar_t key[2] = { l, 0 };
+                ini_->DeleteKey(L"Exclusions", key);
+            }
+        }
+    }
 }
 
 // ----------------------------------------------------------------------- Befehle
@@ -981,6 +1091,8 @@ void Host::TimerLoop()
             // Erst die Sperre, dann lesen (fs/cfg werden nur unter 'op' geändert)
             std::unique_lock<std::mutex> g(v->op, std::try_to_lock);
             if (!g.owns_lock()) continue;
+            // Defender-Ausnahme erneut versuchen (z. B. war Defender beim Hochfahren noch nicht bereit)
+            if (v->fs && v->cfg.avExclude && !v->avActive && v->avRetryTick && now >= v->avRetryTick) SetExclusion(*v, true);
             if (!v->fs || !v->cfg.autoSaveMin || v->cfg.image.empty()) continue;
             if (now - v->lastSaveTick < (unsigned long long)v->cfg.autoSaveMin * 60000ull) continue;
             std::wstring err;
@@ -989,6 +1101,7 @@ void Host::TimerLoop()
                 v->lastSaveTick = now;  // nicht jede Sekunde neu versuchen
             }
         }
+        RetryStaleExclusions();
         if (++tickCount % 60 == 0) PersistStats();
     }
 }

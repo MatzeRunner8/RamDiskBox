@@ -14,7 +14,9 @@ namespace rdb {
 // nicht die der Anfrage.
 void Log(const wchar_t* de, const wchar_t* en, ...);
 std::wstring NtMessage(NTSTATUS st);
-bool DefenderExclusion(bool add, const std::wstring& path, std::wstring& err);   // defender.cpp
+// defender.cpp; permanent = ein neuer Versuch hilft nicht (keine Rechte, Defender nicht vorhanden)
+bool DefenderExclusion(bool add, const std::wstring& path, std::wstring& err, bool* permanent = nullptr);
+bool DefenderHasExclusion(const std::wstring& path, bool& has, bool& hidden, std::wstring& err, bool* permanent = nullptr);
 
 // Sperren: 'op' serialisiert Einhaengen/Speichern/Aushaengen/Aendern. Wer cfg, fs, lastError
 // oder lastSave SCHREIBT, haelt zusaetzlich 'state'; LIST liest nur unter 'state'.
@@ -28,6 +30,10 @@ struct Volume {
     std::wstring lastSave;         // Zeitpunkt der letzten Sicherung (Timestamp(); Clients zeigen ihn mit DisplayTime)
     std::atomic<bool> saving{ false };
     bool avActive = false;         // Defender-Ausnahme gesetzt (unter op)
+    bool avOwned = false;          // ... und von RamDiskBox selbst eingetragen (nur dann wieder entfernen)
+    unsigned long long avRetryTick = 0;  // naechster Versuch, falls das Setzen fehlschlug (0 = keiner)
+    unsigned avRetries = 0;
+    std::wstring avError;          // zuletzt gesetzte Defender-Meldung (wird bei Erfolg wieder geloescht)
 
     void SetError(const std::wstring& e) { std::lock_guard<std::mutex> g(state); lastError = e; }
     std::wstring GetError() { std::lock_guard<std::mutex> g(state); return lastError; }
@@ -57,6 +63,7 @@ private:
     bool DismountVolume(Volume& v, bool force, bool discard, std::wstring& err);
     bool SaveVolume(Volume& v, const std::wstring& path, std::wstring& err);
     void SetExclusion(Volume& v, bool on);
+    void RetryStaleExclusions();
     std::shared_ptr<Volume> Get(wchar_t letter);
     bool ValidateConfig(const VolumeConfig& c, wchar_t ignoreLetter, std::wstring& err);
     void LoadConfig();
@@ -79,6 +86,8 @@ private:
     std::atomic<bool> stopping_{ false };
     std::atomic<int> activeClients_{ 0 };
     std::atomic<int> clientLang_{ 0 };   // Sprache der letzten Anfrage (Lang), fuer Meldungen des Zeitgebers
+    std::vector<wchar_t> staleExcl_;     // eigene Defender-Ausnahmen, deren Entfernen fehlschlug (unter mu_)
+    unsigned long long staleRetryTick_ = 0;
 
     // Statistik
     std::mutex statMu_;
