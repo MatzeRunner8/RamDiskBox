@@ -1,5 +1,13 @@
 # Änderungen / Changelog
 
+## 1.6.2 (Build 11)
+
+- **Frisch geschriebene Dateien bleiben im Cache:** Damit Programme nach dem Ändern einer Datei die richtige Änderungszeit sehen (seit 1.4.1), hat RamDiskBox Windows bisher über die Änderung benachrichtigt. WinFsp verwirft dabei aber immer auch den Cache der Datei, das erste Lesen danach war deutlich langsamer. Bei Dateien ab 1 MB frischt RamDiskBox die Angaben jetzt auf einem anderen Weg auf, und der Cache bleibt erhalten. Gemessen im Dienstmodus: erstes Lesen einer gerade geschriebenen 2-GB-Datei 5–6 statt 2,5 GB/s. Änderungszeit, Größe und Attribute stimmen weiterhin sofort.
+
+**English**
+
+- **Freshly written files stay in the cache:** so that programs see the correct modification time after changing a file (since 1.4.1), RamDiskBox notified Windows about the change. WinFsp always discards the file's cache when doing that, so the first read afterwards was much slower. For files of 1 MB and more, RamDiskBox now refreshes the information another way, and the cache is kept. Measured in service mode: first read of a just-written 2 GB file 5–6 instead of 2.5 GB/s. Modification time, size and attributes are still correct immediately.
+
 ## 1.6.1 (Build 10)
 
 - **Große Dateien schneller hineinkopieren:** Bei Laufwerken mit Windows-Cache schreiben Kopiervorgänge (Explorer, CopyFile, robocopy) jetzt am Cache vorbei. Bisher füllte eine große Kopie den Cache, und Windows hielt den Kopiervorgang immer wieder für Sekunden an (Einbrüche in der Kopieranzeige). Gemessen mit einer 8-GB-Datei: Explorer 1,85 statt 1,05 GB/s, gleichmäßig und ohne Einbrüche. Lesen und alle anderen Programme nutzen den Cache weiter wie bisher.

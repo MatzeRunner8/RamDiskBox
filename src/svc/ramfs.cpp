@@ -18,6 +18,7 @@ constexpr UINT64 kAllocUnit = 4096;          // Clustergroesse nach aussen
 constexpr size_t kChunk = 64 * 1024;         // Datenblock
 constexpr size_t kSmallGran = 4096;          // Wachstumsschritt kleiner Dateien
 constexpr unsigned long long kCompressDelayMs = 1500;  // Komprimieren erst kurz nach dem Schliessen
+constexpr UINT64 kRefreshKeepCacheMin = 1024 * 1024;   // ab dieser Groesse Metadaten ohne Cache-Verlust auffrischen
 
 // Wurzel: System/Administratoren Vollzugriff, angemeldete Benutzer Aendern, Benutzer Lesen,
 // Ersteller-Besitzer Vollzugriff auf eigene Dateien.
@@ -225,6 +226,13 @@ void RamFs::Unmount()
         }
         nCv_.notify_all();
         notifyThread_.join();
+        std::vector<Node*> left;
+        {
+            std::lock_guard<std::mutex> g(nMu_);
+            left.swap(fQ_);
+            nQ_.clear();
+        }
+        for (Node* n : left) Unref(n);
     }
     FspFileSystemStopDispatcher(fs_);
     FspFileSystemRemoveMountPoint(fs_);
@@ -1055,6 +1063,9 @@ VOID RamFs::Cleanup(FSP_FILE_SYSTEM* fs, PVOID ctx, PWSTR name, ULONG flags)
     Node* n = (Node*)ctx;
     Node* m = n->Main();
     if (s->userHandles_.load() > 0) s->userHandles_--;
+    // Eigener Zugriff des Benachrichtigungs-Threads (RefreshMetadata): keine Zeitstempel setzen und
+    // nicht erneut auffrischen. Datenaenderungen anderer Handles (SetLastWriteTime) gelten weiter.
+    if (n->refreshing && !(flags & (FspCleanupSetLastWriteTime | FspCleanupDelete))) return;
     // Aenderung (nicht nur Lesezugriff): danach den Zwischenspeicher des Treibers verwerfen lassen
     const bool modified = (flags & (FspCleanupSetArchiveBit | FspCleanupSetLastWriteTime | FspCleanupSetChangeTime)) != 0;
     if (flags & (FspCleanupSetArchiveBit | FspCleanupSetLastAccessTime | FspCleanupSetLastWriteTime | FspCleanupSetChangeTime)) {
@@ -1104,19 +1115,50 @@ std::wstring RamFs::NotifyPath(Node* n)
     return len == (int)path.size() ? up : path;
 }
 
+// Nach dem Schliessen einer geaenderten Datei kennt der WinFsp-Treiber noch die alten Metadaten
+// (Aenderungszeit, Groesse), weil er sie wegen FileInfoTimeout = INFINITE nicht neu abfragt. Eine
+// Benachrichtigung frischt sie auf, verwirft dabei aber immer auch den Daten-Cache der Datei; das
+// naechste Lesen kommt dann nicht aus dem Arbeitsspeicher-Cache. Bei grossen Dateien schickt der
+// Benachrichtigungs-Thread stattdessen ein SetBasicInfo ohne Aenderung (RefreshMetadata): Dessen
+// Antwort liefert dem Treiber die neuen Metadaten, der Cache bleibt erhalten. Dazu kommt eine
+// Benachrichtigung fuer den Ordner (aktualisiert Ordnerlisten; Ordner haben keinen Daten-Cache).
 void RamFs::QueueNotify(Node* n)
 {
     std::wstring p;
+    bool keepCache;
     {
         Shared tl(&tree_);
-        if (!n->Main()->linked) return;
-        p = NotifyPath(n);
+        Node* m = n->Main();
+        if (!m->linked) return;
+        keepCache = !n->isStream && n->fileSize >= kRefreshKeepCacheMin;
+        p = NotifyPath(keepCache ? (m->parent ? m->parent : root_) : n);
+        if (keepCache) Ref(n);
     }
     {
         std::lock_guard<std::mutex> g(nMu_);
+        if (keepCache) fQ_.push_back(n);
         nQ_.push_back(std::move(p));
     }
     nCv_.notify_one();
+}
+
+bool RamFs::RefreshMetadata(const std::wstring& path)
+{
+    PWSTR mp = FspFileSystemMountPoint(fs_);
+    if (!mp || !*mp) return false;
+    std::wstring full = (mp[0] == L'\\') ? std::wstring(mp) : L"\\\\?\\" + std::wstring(mp);
+    full += path;
+    // Nur Attribut-Zugriff: zaehlt nicht fuer Freigabemodi (stoert keine Programme, die die Datei
+    // gleichzeitig exklusiv oeffnen) und bricht keine Oplocks. Ein SetBasicInfo ohne Aenderung
+    // (alles 0) laeuft bis zu RamFs::SetBasicInfo durch; dessen Antwort liefert dem Treiber die
+    // aktuellen Metadaten.
+    HANDLE h = CreateFileW(full.c_str(), FILE_READ_ATTRIBUTES | FILE_WRITE_ATTRIBUTES | SYNCHRONIZE,
+        FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
+    if (h == INVALID_HANDLE_VALUE) return false;
+    FILE_BASIC_INFO bi = {};
+    BOOL ok = SetFileInformationByHandle(h, FileBasicInfo, &bi, sizeof bi);
+    CloseHandle(h);
+    return ok != FALSE;
 }
 
 void RamFs::NotifierLoop()
@@ -1125,11 +1167,33 @@ void RamFs::NotifierLoop()
     std::vector<UINT8> one(sizeof(FSP_FSCTL_NOTIFY_INFO) + 65536);
     for (;;) {
         std::vector<std::wstring> batch;
+        std::vector<Node*> refresh;
         {
             std::unique_lock<std::mutex> g(nMu_);
-            nCv_.wait(g, [&] { return nStop_ || !nQ_.empty(); });
-            if (nStop_) return;
+            nCv_.wait(g, [&] { return nStop_ || !nQ_.empty() || !fQ_.empty(); });
             batch.swap(nQ_);
+            refresh.swap(fQ_);
+        }
+        std::sort(refresh.begin(), refresh.end());
+        for (size_t i = 0; i < refresh.size(); i++) {
+            Node* n = refresh[i];
+            if (i > 0 && refresh[i - 1] == n) { Unref(n); continue; }
+            std::wstring p;
+            {
+                Shared tl(&tree_);
+                if (n->Main()->linked) p = NotifyPath(n);
+            }
+            if (!p.empty() && !nStop_) {
+                n->refreshing = true;
+                bool ok = RefreshMetadata(p);
+                n->refreshing = false;
+                if (!ok) batch.push_back(p);   // nicht moeglich (z. B. Datei wird geloescht): bisheriger Weg
+            }
+            Unref(n);
+        }
+        {
+            std::lock_guard<std::mutex> g(nMu_);
+            if (nStop_) return;
         }
         std::sort(batch.begin(), batch.end());
         batch.erase(std::unique(batch.begin(), batch.end()), batch.end());
@@ -1239,7 +1303,7 @@ NTSTATUS RamFs::SetBasicInfo(FSP_FILE_SYSTEM* fs, PVOID ctx, UINT32 attrs, UINT6
     Node* m = n->Main();
     {
         Excl ml(&m->lock);
-        if (attrs != INVALID_FILE_ATTRIBUTES) {
+        if (attrs != INVALID_FILE_ATTRIBUTES && attrs != 0) {   // 0 = keine Aenderung (wie NTFS)
             UINT32 keep = m->attributes & (FILE_ATTRIBUTE_DIRECTORY | FILE_ATTRIBUTE_REPARSE_POINT);
             m->attributes = (attrs & ~(FILE_ATTRIBUTE_DIRECTORY | FILE_ATTRIBUTE_NORMAL | FILE_ATTRIBUTE_REPARSE_POINT)) | keep;
         }

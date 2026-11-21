@@ -92,6 +92,7 @@ struct Node {
     UINT64 gen = 0;                  // Aenderungszaehler der Daten (unter exklusiver Sperre)
     bool compDirty = false;          // seit der letzten Komprimierung geaendert
     std::atomic<bool> queued{ false };  // wartet auf den Komprimierer
+    std::atomic<bool> refreshing{ false };  // Metadaten werden gerade im Treiber aufgefrischt
     SRWLOCK lock = SRWLOCK_INIT;
     std::atomic<LONG> refs{ 0 };     // offene Kontexte + 1, solange eingehaengt
     Node* allPrev = nullptr;         // Liste aller Knoten (fuer das Aufraeumen)
@@ -175,9 +176,11 @@ private:
     void TouchDir(Node* dir);
 
     // Der WinFsp-Treiber haelt Dateiinfos (bei Windows-Cache unbegrenzt) zwischen. Zeitstempel, die erst
-    // im Cleanup gesetzt werden, kaemen sonst nie bei Programmen an: nach dem Cleanup meldet ein eigener
-    // Thread die Datei als geaendert, das verwirft den Zwischenspeicher (FspFileSystemNotify).
+    // im Cleanup gesetzt werden, kaemen sonst nie bei Programmen an: nach dem Cleanup frischt ein eigener
+    // Thread sie auf. Kleine Dateien per Benachrichtigung (verwirft auch den Daten-Cache), Dateien ab
+    // kRefreshKeepCacheMin per SetBasicInfo ohne Aenderung plus Ordner-Benachrichtigung (Cache bleibt).
     void QueueNotify(Node* n);
+    bool RefreshMetadata(const std::wstring& path);  // Metadaten im Treiber auffrischen, Cache behalten
     void NotifierLoop();
     std::wstring NotifyPath(Node* n);          // unter tree_; ohne Namensnormalisierung in Grossbuchstaben
 
@@ -256,8 +259,9 @@ private:
     std::thread notifyThread_;
     std::mutex nMu_;
     std::condition_variable nCv_;
-    std::vector<std::wstring> nQ_;
-    bool nStop_ = false;
+    std::vector<std::wstring> nQ_;              // Benachrichtigung (verwirft bei Dateien den Cache)
+    std::vector<Node*> fQ_;                     // grosse Dateien: Metadaten ohne Cache-Verlust auffrischen (mit Ref)
+    std::atomic<bool> nStop_{ false };
 };
 
 bool ParsePath(PCWSTR path, ParsedPath& out);
