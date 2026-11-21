@@ -1,5 +1,13 @@
 # Änderungen / Changelog
 
+## 1.6.1 (Build 10)
+
+- **Große Dateien schneller hineinkopieren:** Bei Laufwerken mit Windows-Cache schreiben Kopiervorgänge (Explorer, CopyFile, robocopy) jetzt am Cache vorbei. Bisher füllte eine große Kopie den Cache, und Windows hielt den Kopiervorgang immer wieder für Sekunden an (Einbrüche in der Kopieranzeige). Gemessen mit einer 8-GB-Datei: Explorer 1,85 statt 1,05 GB/s, gleichmäßig und ohne Einbrüche. Lesen und alle anderen Programme nutzen den Cache weiter wie bisher.
+
+**English**
+
+- **Faster copying of large files onto the drive:** on drives with the Windows cache, copy operations (Explorer, CopyFile, robocopy) now write past the cache. Previously a large copy filled the cache, and Windows repeatedly paused the copy for seconds (dips in the copy dialog). Measured with an 8 GB file: Explorer 1.85 instead of 1.05 GB/s, steady and without dips. Reading and all other programs keep using the cache as before.
+
 ## 1.6.0 (Build 9)
 
 - **Aufgeräumte Oberfläche:**

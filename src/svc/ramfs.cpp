@@ -33,6 +33,35 @@ UINT64 NowFt()
     return ((UINT64)ft.dwHighDateTime << 32) | ft.dwLowDateTime;
 }
 
+#ifndef FILE_SEQUENTIAL_ONLY
+#define FILE_SEQUENTIAL_ONLY 0x00000004
+#endif
+
+// Kopierprogramme (Explorer, CopyFile, robocopy) oeffnen das Ziel mit FILE_SEQUENTIAL_ONLY zum
+// Schreiben. Solche Zugriffe gehen am Windows-Cache vorbei: Sonst fuellt eine grosse Kopie den
+// Cache bis zur Dirty-Page-Grenze, und Windows haelt den Kopiervorgang immer wieder sekundenlang
+// an. Gilt nur fuer diesen einen Zugriff (WinFsp: FileObject ohne FO_CACHE_SUPPORTED); andere
+// Handles derselben Datei bleiben im Cache, WinFsp schreibt ihn vor einem direkten Zugriff zurueck.
+// RDB_DIRECTWRITE=0 schaltet das ab (fuer Vergleichsmessungen).
+bool DirectWriteEnabled()
+{
+    static const bool on = [] {
+        wchar_t v[4] = {};
+        DWORD n = GetEnvironmentVariableW(L"RDB_DIRECTWRITE", v, 4);
+        return !(n == 1 && v[0] == L'0');
+    }();
+    return on;
+}
+
+void BypassCacheForCopyTarget(bool useCache, bool isDir, UINT32 createOptions, UINT32 grantedAccess)
+{
+    if (!useCache || isDir || !(createOptions & FILE_SEQUENTIAL_ONLY)) return;
+    if (!(grantedAccess & (FILE_WRITE_DATA | FILE_APPEND_DATA))) return;
+    if (!DirectWriteEnabled()) return;
+    if (FSP_FILE_SYSTEM_OPERATION_CONTEXT* oc = FspFileSystemGetOperationContext())
+        oc->Response->Rsp.Create.Opened.DisableCache = 1;
+}
+
 } // namespace
 
 bool NameLess::operator()(std::wstring_view a, std::wstring_view b) const noexcept
@@ -901,7 +930,6 @@ NTSTATUS RamFs::GetSecurityByName(FSP_FILE_SYSTEM* fs, PWSTR name, PUINT32 pattr
 NTSTATUS RamFs::CreateCb(FSP_FILE_SYSTEM* fs, PWSTR name, UINT32 createOptions, UINT32 grantedAccess,
     UINT32 attrs, PSECURITY_DESCRIPTOR sd, UINT64 allocSize, PVOID* pctx, FSP_FSCTL_FILE_INFO* fi)
 {
-    (void)grantedAccess;
     RamFs* s = Self(fs);
     try {
         ParsedPath pp;
@@ -954,6 +982,7 @@ NTSTATUS RamFs::CreateCb(FSP_FILE_SYSTEM* fs, PWSTR name, UINT32 createOptions, 
         s->userHandles_++;
         *pctx = n;
         FillInfo(n, fi);
+        BypassCacheForCopyTarget(s->opt_.useCache, isDir, createOptions, grantedAccess);
         return STATUS_SUCCESS;
     } catch (const std::bad_alloc&) {
         return STATUS_INSUFFICIENT_RESOURCES;
@@ -963,7 +992,6 @@ NTSTATUS RamFs::CreateCb(FSP_FILE_SYSTEM* fs, PWSTR name, UINT32 createOptions, 
 NTSTATUS RamFs::Open(FSP_FILE_SYSTEM* fs, PWSTR name, UINT32 createOptions, UINT32 grantedAccess,
     PVOID* pctx, FSP_FSCTL_FILE_INFO* fi)
 {
-    (void)createOptions; (void)grantedAccess;
     RamFs* s = Self(fs);
     try {
         ParsedPath pp;
@@ -978,6 +1006,7 @@ NTSTATUS RamFs::Open(FSP_FILE_SYSTEM* fs, PWSTR name, UINT32 createOptions, UINT
         *pctx = n;
         Shared nl(&n->lock);
         FillInfo(n, fi);
+        BypassCacheForCopyTarget(s->opt_.useCache, n->IsDir(), createOptions, grantedAccess);
         return STATUS_SUCCESS;
     } catch (const std::bad_alloc&) {
         return STATUS_INSUFFICIENT_RESOURCES;
