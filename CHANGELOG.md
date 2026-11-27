@@ -1,5 +1,13 @@
 # Änderungen / Changelog
 
+## 1.7.1 (Build 15)
+
+- **Keine lokalen Pfade mehr in den Programmdateien:** Die EXE-Dateien enthielten den vollständigen Pfad der Debug-Datei (PDB) auf dem Entwicklungs-PC. Jetzt steht dort nur noch der Dateiname. Am Programm selbst ändert sich nichts.
+
+**English**
+
+- **No more local paths in the program files:** the EXE files contained the full path of the debug file (PDB) on the development PC. Now they only contain the file name. The program itself is unchanged.
+
 ## 1.7.0 (Build 14)
 
 - **Neu: Extras → Cache verlagern …** legt den Cache von Browsern und Programmen auf ein RAM-Laufwerk. Das schont die SSD und kann schneller sein.
